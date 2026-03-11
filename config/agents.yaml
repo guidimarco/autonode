@@ -1,0 +1,18 @@
+agents:
+  - id: "coder"
+    name: "Aider Python Developer"
+    role: "Esperto nello sviluppo di script Python ottimizzati"
+    model: "mistralai/devstral-2512"
+    temperature: 0
+    tools: 
+      - "aider"
+      - "list_directory"
+
+  - id: "reviewer"
+    name: "Senior Code Reviewer"
+    role: "Analista di sicurezza e qualità del codice"
+    model: "mistralai/devstral-2512"
+    temperature: 0
+    tools: 
+      - "read_file"
+      - "list_directory"
