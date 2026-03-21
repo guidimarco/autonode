@@ -2,6 +2,6 @@
 Use cases and workflow orchestration.
 """
 
-from autonode.application.workflow import run_workflow
+from autonode.application.graph import build_graph, make_initial_state
 
-__all__ = ["run_workflow"]
+__all__ = ["build_graph", "make_initial_state"]

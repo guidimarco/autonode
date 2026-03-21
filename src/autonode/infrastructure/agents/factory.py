@@ -1,12 +1,16 @@
 """
 LangChain agent factory: builds runnable agents from config using ChatOpenAI and tool binding.
+The system_prompt (if set in config) is prepended to every invocation via a RunnableLambda,
+keeping graph nodes free from prompt-management concerns.
 """
 
 import os
-from typing import Any, cast
+from typing import Any
 
-from langchain_core.runnables import RunnableSerializable
+from langchain_core.messages import BaseMessage, SystemMessage
+from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from autonode.infrastructure.config_loader import load_agents_config
 from autonode.infrastructure.tools.registry import ToolRegistry
@@ -24,21 +28,34 @@ class CrewFactory:
         self._catalog = load_agents_config(config_path)
         self._tool_registry = tool_registry or ToolRegistry()
 
-    def create_agent(self, agent_id: str) -> RunnableSerializable[Any, Any]:
-        """Build a single agent (LLM + bound tools)."""
+    def create_agent(self, agent_id: str) -> Runnable[Any, Any]:
+        """
+        Build a single agent: [system_prompt prepend →] LLM with bound tools.
+        The returned runnable accepts list[BaseMessage] and returns an AIMessage.
+        """
         config = self._catalog.get(agent_id)
         if not config:
-            raise ValueError(f"Agente {agent_id} non trovato nel catalogo.")
+            raise ValueError(f"Agente '{agent_id}' non trovato nel catalogo.")
+
+        api_key = os.getenv("OPEN_ROUTER_API_KEY")
         llm = ChatOpenAI(
             model=config["model"],
             temperature=config.get("temperature", 0.0),
-            api_key=lambda: os.getenv("OPEN_ROUTER_API_KEY") or "",
+            api_key=SecretStr(api_key) if api_key else None,
             base_url="https://openrouter.ai/api/v1",
         )
-        tool_names = config.get("tools", [])
-        tools = self._tool_registry.get_tool_list(tool_names)
-        return cast(RunnableSerializable[Any, Any], llm.bind_tools(tools))
+        tools = self._tool_registry.get_tool_list(config.get("tools", []))
+        bound_llm: Runnable[Any, Any] = llm.bind_tools(tools) if tools else llm
 
-    def create_all(self) -> dict[str, RunnableSerializable[Any, Any]]:
-        """Build all agents from the catalog."""
+        system_prompt = config.get("system_prompt", "")
+        if not system_prompt:
+            return bound_llm
+
+        def prepend_system(messages: list[BaseMessage]) -> list[BaseMessage]:
+            return [SystemMessage(content=system_prompt), *messages]
+
+        return RunnableLambda(prepend_system) | bound_llm
+
+    def create_all(self) -> dict[str, Runnable[Any, Any]]:
+        """Build all agents defined in the catalog."""
         return {aid: self.create_agent(aid) for aid in self._catalog}

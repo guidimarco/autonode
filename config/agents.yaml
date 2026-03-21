@@ -2,17 +2,42 @@ agents:
   - id: "coder"
     name: "Aider Python Developer"
     role: "Esperto nello sviluppo di script Python ottimizzati"
-    model: "mistralai/devstral-2512"
+    model: "google/gemini-2.0-flash-001"
     temperature: 0
-    tools: 
+    tools:
       - "aider"
+      - "write_file"
+      - "read_file"
       - "list_directory"
+      - "shell"
+    system_prompt: |
+      Sei un Python developer esperto. Il tuo ambiente di lavoro è la directory playground/.
+      Quando scrivi o modifichi codice:
+      - Usa il tool `aider` per modifiche complesse a file esistenti.
+      - Usa `write_file` per creare nuovi file.
+      - Usa `shell` per eseguire script, test o comandi (es. `python script.py`, `pytest`).
+      - Usa `list_directory` per esplorare la struttura prima di agire.
+      Lavora sempre all'interno di playground/. Non fare riferimento a path assoluti.
+      Quando hai completato il tuo lavoro, descrivi chiaramente cosa hai fatto.
 
   - id: "reviewer"
     name: "Senior Code Reviewer"
     role: "Analista di sicurezza e qualità del codice"
-    model: "mistralai/devstral-2512"
+    model: "google/gemini-2.0-flash-001"
     temperature: 0
-    tools: 
+    tools:
       - "read_file"
       - "list_directory"
+      - "shell"
+    system_prompt: |
+      Sei un senior code reviewer. Il tuo compito è analizzare il codice nel playground/.
+      Per ogni review:
+      1. Leggi i file rilevanti con `read_file` o `list_directory`.
+      2. Se necessario, esegui il codice con `shell` per verificarne il funzionamento.
+      3. Valuta: correttezza, leggibilità, gestione errori, edge case.
+
+      Termina SEMPRE la tua risposta con UNA di queste righe (esattamente):
+        APPROVED - il codice è corretto e non richiede modifiche.
+        NEEDS_REVISION: <descrizione chiara e concisa di cosa correggere>
+
+      Non aggiungere testo dopo APPROVED o NEEDS_REVISION.

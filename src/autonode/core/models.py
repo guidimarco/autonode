@@ -2,7 +2,7 @@
 Domain and configuration models. Framework-agnostic.
 """
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class AgentConfig(TypedDict):
@@ -13,3 +13,5 @@ class AgentConfig(TypedDict):
     model: str
     temperature: float
     tools: list[str]
+    role: NotRequired[str]
+    system_prompt: NotRequired[str]

@@ -1,6 +1,7 @@
 # Progetto Multi-Agent AI per Codebase Locale
 
 ## 1. Core Architetturale
+
 - **Scelta principale:** LangChain come framework principale.
 - **Obiettivo:** Core agnostico rispetto al framework (LangChain o Semantic Kernel), tramite interfacce/adapter.
 - **Motivazione:** Ecosistema LangChain vasto e maturo, numerosi tool e integrazioni, buona documentazione e supporto community.
@@ -11,18 +12,20 @@
 ---
 
 ## 2. Orchestrazione Multi-Agent
-- **Scelta principale:** LangGraph sopra LangChain per orchestrazione agenti.
-- **Motivazione:** Permette flussi gerarchici, sequenziali e liberi tra agenti, miglior controllo e debug.
+
+- **Scelta principale:** LangGraph sopra LangChain come **motore centrale** per orchestrazione e **cicli iterativi** (stato del task, transizioni condizionali, feedback tra nodi).
+- **Esempio di ciclo:** Coder → Reviewer → (in caso di errore o richiesta modifiche) ritorno al Coder fino a criteri di uscita definiti nel grafo.
+- **Motivazione:** Permette flussi gerarchici, sequenziali e liberi tra agenti, miglior controllo e debug rispetto a catene lineari fisse.
 - **Alternativa:** Crew AI
   - Pro: semplice per task out-of-the-box.
   - Contro: problemi di debugging con modelli economici e gestione contesto.
-- **Architettura suggerita:** 
-  - Core agnostico → Adapter LangChain → LangGraph per gestione flussi.
-  - Possibilità futura di sostituire LangChain con Semantic Kernel senza rifare core.
+- **Architettura suggerita:**
+  - Core agnostico → Adapter LangChain → LangGraph per gestione flussi e stato.
 
 ---
 
 ## 3. Gestione degli Agenti e Tool
+
 - **Agenti:** Generalisti e specializzati per task diversi (analisi, sviluppo, review, test, brainstorming).
 - **Tool:** Lettura/scrittura file, esecuzione script, chiamate API, integrazione con LLM provider.
 - **Debug:** LangSmith (SaaS) o alternative open source (Langfuse, Helicone) per tracciare input/output agenti, tool call, prompt e output raw.
@@ -30,14 +33,31 @@
 
 ---
 
-## 4. RAG e Ricerca Semantica
+## 4. Interfacce di Accesso (hub ibrido)
+
+Il runtime multi-agente è **centralizzato** e raggiungibile da più canali, con la stessa logica di orchestrazione sottostante.
+
+| Canale                 | Ruolo                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| **Local Dev (Cursor)** | Integrazione nativa tramite **MCP** (`presentation/mcp_server.py`): sessioni interattive, tool e stato allineati al grafo.            |
+| **Remote Automation**  | **API HTTP** FastAPI (`presentation/api_server.py`): endpoint per avviare o riprendere task da **n8n** o altri orchestratori esterni. |
+
+**Memoria condivisa:** lo stato del task persistito (checkpoint) deve essere lo **stesso store** leggibile sia dal server MCP sia dall’API remota, così una sessione Cursor e una chiamata n8n operano sullo stesso task quando serve.
+
+**Sicurezza (tool di scrittura):** tutti i tool che modificano filesystem o eseguono codice devono operare in **sandbox** o in una **directory controllata** (workspace del task), senza escape verso path arbitrari non autorizzati.
+
+---
+
+## 5. RAG e Ricerca Semantica
+
 - **Scelta futura:** Integrazione con LlamaIndex (ex MyIndex) per retrieval avanzato e RAG su repository.
 - **Motivazione:** Più flessibile e potente rispetto alle soluzioni built-in LangChain, permette indicizzazione semantica di codice e documenti.
 - **Alternativa iniziale:** LangChain + Vector DB (Chroma, Qdrant, Weaviate) con tool loader nativo per prototipi rapidi.
 
 ---
 
-## 5. Sandbox e Sicurezza
+## 6. Sandbox e Sicurezza
+
 - **Obiettivo:** Isolare ogni task/agent per sicurezza e testing.
 - **Soluzione iniziale:** Git worktree + Python virtualenv per ogni task.
 - **Soluzione futura:** Container Docker o Podman per isolamento totale (filesystem, processi, rete), integrabile con tool wrapper LangChain.
@@ -46,7 +66,8 @@
 
 ---
 
-## 6. Flussi di Task
+## 7. Flussi di Task
+
 - **Tipi di flussi supportati:**
   - Sequenziali: planner → task agents → review → report.
   - Gerarchici/liberi: brainstorming, task splitting, agent collaboration.
@@ -55,24 +76,27 @@
 
 ---
 
-## 7. Strategie di Test e Avvio
+## 8. Strategie di Test e Avvio
+
 - Primo test rapido: 1 agente + tool base (read/write file) + worktree locale.
 - Log dettagliato di input/output e tool call tramite LangSmith o logging locale.
 - Scalare a multi-agent e orchestrazione dopo validazione.
 
 ---
 
-## 8. Conclusioni e Motivazioni Scelte
+## 9. Conclusioni e Motivazioni Scelte
+
 - **LangChain:** ecosistema, librerie, agenti già pronti.
 - **LangGraph:** orchestrazione flussi complessi e debug migliore.
 - **LlamaIndex:** futura integrazione RAG avanzata.
-- **Sandbox:** sicurezza e testing isolato, modulare.
-- **Agnosticismo core:** flessibilità futura per cambiare framework senza riscrivere logica core.
+- **Sandbox:** sicurezza e testing isolato, modulare; obbligo operativo per tool di scrittura/esecuzione (directory controllata o sandbox).
+- **Agnosticismo core:** flessibilità futura per cambiare framework senza riscrivere logica core; hub MCP + API sulla stessa orchestrazione e stessa memoria di task dove richiesto.
 - **Alternativa principale:** Semantic Kernel → più stabile in orchestrazione interna, ecosistema più piccolo, meno flessibile per test locali e agenti economici.
 
 ---
 
-## 9. Link e Riferimenti
+## 10. Link e Riferimenti
+
 - [LangChain GitHub](https://github.com/hwchase17/langchain)
 - [LangGraph GitHub](https://github.com/hwchase17/langgraph)
 - [LlamaIndex GitHub](https://github.com/jerryjliu/llama_index)
