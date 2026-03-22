@@ -85,7 +85,8 @@ Nessun ciclo tra layer; il dominio resta sostituibile (**Semantic Kernel**, altr
 | Componente | Ruolo |
 | ---------- | ----- |
 | **GitPython adapter** (`git_adapter.py`, es. `GitShadowVcsProvider`) | Implementa **`VCSProviderPort`**: worktree in directory dedicata, branch `autonode/session-*`, commit/push sul branch di sessione, rollback best-effort. |
-| **Tool / Aider** | Integrazione **Aider** come tool di editing nel registry; path di lavoro allineato al worktree quando il grafo ha eseguito il provisioning. |
+| **Tool / Aider** | `make_aider_tool`: integrazione **Aider** nel registry; `cwd` sulla root del processo (`"."`); **Git guardrail**: se `git status --porcelain` non è vuoto, il tool non avvia Aider (commit/stash richiesti). Con provisioning VCS, allineare il path di lavoro al worktree. |
+| **Tool / exploration (read-only)** | Moduli `path_guard`, `ignore_rules`, `repository_map`, `codebase_search`: mappa e ricerca testuale confinate alla `root_dir` del registry; factory registrate dal `ToolRegistry` senza logica pesante nel registry. |
 | **Agent factory, registry, config loader** | Wiring LangChain, caricamento YAML, tracing. |
 
 **GitPython vs comandi shell**

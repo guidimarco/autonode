@@ -1,24 +1,23 @@
-# Workflow topology (agents are defined in config/agents.yaml).
 version: 1
-entry: coder
-max_iterations: 3
+entry: analyst
+max_iterations: 2 # Sufficienti per un'analisi conoscitiva
 post_processing:
   - action: log
     params:
-      message: "Workflow graph completed"
+      message: "Analisi architettonica completata"
       level: INFO
   - action: echo_state
     params:
       keys: ["verdict", "iteration"]
 
 nodes:
-  - id: coder
+  - id: analyst
     kind: agent
-    agent_id: coder
+    agent_id: analyst
 
-  - id: coder_tools
+  - id: analyst_tools
     kind: tool_node
-    tools_agent_id: coder
+    tools_agent_id: analyst
 
   - id: reviewer
     kind: agent
@@ -38,17 +37,17 @@ nodes:
     clear_verdict: true
 
 edges:
-  - from_node: coder_tools
-    to: coder
+  - from_node: analyst_tools
+    to: analyst
   - from_node: reviewer_tools
     to: reviewer
   - from_node: prepare_revision
-    to: coder
+    to: analyst
 
 routing:
-  coder:
+  analyst:
     kind: tool_calls_or_next
-    tools_node: coder_tools
+    tools_node: analyst_tools
     next: reviewer
   reviewer:
     kind: reviewer_finish_or_tools_or_revision

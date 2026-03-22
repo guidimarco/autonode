@@ -15,7 +15,9 @@ from langchain_community.agent_toolkits import FileManagementToolkit
 from langchain_core.tools import BaseTool, tool
 
 from autonode.core.tools.ports import ToolRegistryPort
-from autonode.infrastructure.tools.aider import aider_tool
+from autonode.infrastructure.tools.aider import make_aider_tool
+from autonode.infrastructure.tools.codebase_search import make_search_codebase_tool
+from autonode.infrastructure.tools.repository_map import make_get_repository_map_tool
 
 
 def _make_sandboxed_shell_tool(root_dir: str) -> BaseTool:
@@ -75,8 +77,12 @@ class ToolRegistry(ToolRegistryPort):
         self._load_standard_tools()
 
     def _load_standard_tools(self) -> None:
-        # Aider: external subprocess, already sandboxed via cwd in aider.py
-        self.register("aider", aider_tool)
+        # Aider: cwd project root; Git guardrail in aider.py
+        self.register("aider", make_aider_tool("."))
+
+        # Read-only exploration (scoped to root_dir)
+        self.register("get_repository_map", make_get_repository_map_tool(self._root_dir))
+        self.register("search_codebase", make_search_codebase_tool(self._root_dir))
 
         # File I/O — restricted to root_dir by FileManagementToolkit
         file_toolkit = FileManagementToolkit(
