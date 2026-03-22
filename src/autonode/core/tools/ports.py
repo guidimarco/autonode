@@ -1,6 +1,5 @@
 """
-Abstract ports (interfaces) for infrastructure. Enables swapping LangChain
-for another runtime (e.g. Semantic Kernel) without changing application layer.
+Abstract ports (interfaces) for tools.
 """
 
 from abc import ABC, abstractmethod
@@ -27,17 +26,9 @@ class ToolRegistryPort(ABC):
         pass
 
     @abstractmethod
+    def get_tool_list_strict(self, names: list[str]) -> list[Any]:
+        """Like get_tool_list but raises if any name is missing from the registry."""
+
+    @abstractmethod
     def list_available_tools(self) -> list[str]:
-        pass
-
-
-class AgentFactoryPort(ABC):
-    """Abstract interface for creating runnable agents from config."""
-
-    @abstractmethod
-    def create_agent(self, agent_id: str) -> Any:
-        pass
-
-    @abstractmethod
-    def create_all(self) -> dict[str, Any]:
         pass

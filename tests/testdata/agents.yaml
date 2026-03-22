@@ -1,0 +1,12 @@
+agents:
+  - id: alpha_agent
+    model: "test/dummy-model"
+    tools:
+      - read_file
+      - shell
+
+  - id: beta_agent
+    model: "test/dummy-model"
+    tools:
+      - read_file
+      - list_directory

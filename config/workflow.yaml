@@ -1,0 +1,56 @@
+# Workflow topology (agents are defined in config/agents.yaml).
+version: 1
+entry: coder
+max_iterations: 3
+post_processing:
+  - action: log
+    params:
+      message: "Workflow graph completed"
+      level: INFO
+  - action: echo_state
+    params:
+      keys: ["verdict", "iteration"]
+
+nodes:
+  - id: coder
+    kind: agent
+    agent_id: coder
+
+  - id: coder_tools
+    kind: tool_node
+    tools_agent_id: coder
+
+  - id: reviewer
+    kind: agent
+    agent_id: reviewer
+    verdict:
+      approved_marker: "APPROVED"
+      approved_verdict: "approved"
+      revision_verdict: "needs_revision"
+
+  - id: reviewer_tools
+    kind: tool_node
+    tools_agent_id: reviewer
+
+  - id: prepare_revision
+    kind: state_update
+    increment_iteration: true
+    clear_verdict: true
+
+edges:
+  - from_node: coder_tools
+    to: coder
+  - from_node: reviewer_tools
+    to: reviewer
+  - from_node: prepare_revision
+    to: coder
+
+routing:
+  coder:
+    kind: tool_calls_or_next
+    tools_node: coder_tools
+    next: reviewer
+  reviewer:
+    kind: reviewer_finish_or_tools_or_revision
+    tools_node: reviewer_tools
+    revision_node: prepare_revision

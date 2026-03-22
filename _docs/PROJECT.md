@@ -27,6 +27,7 @@
 ## 3. Gestione degli Agenti e Tool
 
 - **Agenti:** Generalisti e specializzati per task diversi (analisi, sviluppo, review, test, brainstorming).
+- **Motore di editing (grafo):** **Aider** è il motore di scrittura codice **primario** integrato nel grafo (tool/registry lato infrastructure), orchestrato dagli agenti LangGraph senza accoppiare il dominio `core/` ad Aider o a LangChain.
 - **Tool:** Lettura/scrittura file, esecuzione script, chiamate API, integrazione con LLM provider.
 - **Debug:** LangSmith (SaaS) o alternative open source (Langfuse, Helicone) per tracciare input/output agenti, tool call, prompt e output raw.
 - **Motivazione:** Ecosistema LangChain già ampio e rodato, facilita testing e sviluppo iniziale anche con modelli economici.
@@ -37,11 +38,11 @@
 
 Il runtime multi-agente è **centralizzato** e raggiungibile da più canali, con la stessa logica di orchestrazione sottostante.
 
-| Canale                        | Ruolo                                                                                                                                                                                                                                                        |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Canale                 | Ruolo                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
 | **Ingressi primari (remote)** | **n8n** e **Telegram** (bot / automazioni) come canali operativi principali: payload testuali e metadati arrivano al layer **Presentation** tramite **FastAPI** (`presentation/api_server.py`), tipicamente via webhook (`POST /webhook/n8n` o equivalente). |
-| **Local Dev (Cursor)**        | Integrazione nativa tramite **MCP** (`presentation/mcp_server.py`), dove presente: sessioni interattive, tool e stato allineati al grafo.                                                                                                                    |
-| **Remote Automation**         | Stesso backend FastAPI: avvio/ripresa task, correlazione `thread_id` / sessione per allineamento a checkpoint e notifiche.                                                                                                                                   |
+| **Local Dev (Cursor)** | Integrazione nativa tramite **MCP** (`presentation/mcp_server.py`), dove presente: sessioni interattive, tool e stato allineati al grafo. |
+| **Remote Automation**  | Stesso backend FastAPI: avvio/ripresa task, correlazione `thread_id` / sessione per allineamento a checkpoint e notifiche. |
 
 **Memoria condivisa:** lo stato del task persistito (checkpoint) deve essere lo **stesso store** leggibile sia dal server MCP sia dall’API remota, così una sessione locale e una pipeline n8n/Telegram operano sullo stesso task quando serve.
 
@@ -68,10 +69,10 @@ Il runtime multi-agente è **centralizzato** e raggiungibile da più canali, con
 
 ### Gestione versione e osservabilità remota
 
-| Approccio                                 | Pro                                                                                                                    | Contro                                                                                  |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| **GitPython** (adapter in infrastructure) | API tipizzata, meno shell injection, testabile, integrabile con logica applicativa (commit message, branch, worktree). | Dipendenza aggiuntiva; edge case Git da gestire esplicitamente.                         |
-| **Comandi `git` via shell**               | Flessibile, scriptabile ovunque.                                                                                       | Più fragile (quoting, error handling), più difficile da testare in modo deterministico. |
+| Approccio | Pro | Contro |
+| --------- | --- | ------ |
+| **GitPython** (adapter in infrastructure) | API tipizzata, meno shell injection, testabile, integrabile con logica applicativa (commit message, branch, worktree). | Dipendenza aggiuntiva; edge case Git da gestire esplicitamente. |
+| **Comandi `git` via shell** | Flessibile, scriptabile ovunque. | Più fragile (quoting, error handling), più difficile da testare in modo deterministico. |
 
 - Il sistema utilizza **GitPython** per: creare worktree e branch di sessione, registrare **commit automatici** dopo round di editing riusciti, ed eseguire **push** del branch di sessione verso il remoto quando configurato — utile per **monitoraggio remoto** (es. notifiche o riassunti su **Telegram** tramite n8n dopo `git push`).
 - **Python virtualenv** (o equivalente) resta consigliato per task/tool per dipendenze isolate.

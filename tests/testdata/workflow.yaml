@@ -1,0 +1,54 @@
+version: 1
+entry: alpha
+max_iterations: 2
+post_processing:
+  - action: noop
+    params: {}
+  - action: log
+    params:
+      message: "fixture workflow completed"
+      level: INFO
+
+nodes:
+  - id: alpha
+    kind: agent
+    agent_id: alpha_agent
+
+  - id: alpha_tools
+    kind: tool_node
+    tools_agent_id: alpha_agent
+
+  - id: beta
+    kind: agent
+    agent_id: beta_agent
+    verdict:
+      approved_marker: "OK"
+      approved_verdict: "approved"
+      revision_verdict: "retry"
+
+  - id: beta_tools
+    kind: tool_node
+    tools_agent_id: beta_agent
+
+  - id: bump_turn
+    kind: state_update
+    increment_iteration: true
+    clear_verdict: true
+
+edges:
+  - from_node: alpha_tools
+    to: alpha
+  - from_node: beta_tools
+    to: beta
+  - from_node: bump_turn
+    to: alpha
+
+routing:
+  alpha:
+    kind: tool_calls_or_next
+    tools_node: alpha_tools
+    next: beta
+  beta:
+    kind: reviewer_finish_or_tools_or_revision
+    tools_node: beta_tools
+    revision_node: bump_turn

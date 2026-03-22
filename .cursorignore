@@ -1,2 +1,9 @@
-# Add directories or file patterns to ignore during indexing (e.g. foo/ or *.csv)
+# Cache
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Security
 .env

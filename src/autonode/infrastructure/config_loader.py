@@ -6,7 +6,7 @@ from pathlib import Path
 
 import yaml
 
-from autonode.core.models import AgentConfig
+from autonode.core.agents.models import AgentConfig
 
 
 def load_agents_config(config_path: str = "config/agents.yaml") -> dict[str, AgentConfig]:

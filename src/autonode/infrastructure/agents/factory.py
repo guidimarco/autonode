@@ -12,11 +12,12 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
+from autonode.core.agents.ports import AgentFactoryPort
 from autonode.infrastructure.config_loader import load_agents_config
 from autonode.infrastructure.tools.registry import ToolRegistry
 
 
-class CrewFactory:
+class CrewFactory(AgentFactoryPort):
     """Creates LangChain runnable agents from agents config and a tool registry."""
 
     def __init__(
@@ -39,15 +40,15 @@ class CrewFactory:
 
         api_key = os.getenv("OPEN_ROUTER_API_KEY")
         llm = ChatOpenAI(
-            model=config["model"],
-            temperature=config.get("temperature", 0.0),
+            model=config.model,
+            temperature=config.temperature,
             api_key=SecretStr(api_key) if api_key else None,
             base_url="https://openrouter.ai/api/v1",
         )
-        tools = self._tool_registry.get_tool_list(config.get("tools", []))
+        tools = self._tool_registry.get_tool_list(config.tools)
         bound_llm: Runnable[Any, Any] = llm.bind_tools(tools) if tools else llm
 
-        system_prompt = config.get("system_prompt", "")
+        system_prompt = config.system_prompt or ""
         if not system_prompt:
             return bound_llm
 
@@ -55,6 +56,12 @@ class CrewFactory:
             return [SystemMessage(content=system_prompt), *messages]
 
         return RunnableLambda(prepend_system) | bound_llm
+
+    def tool_names_for_agent(self, agent_id: str) -> list[str]:
+        config = self._catalog.get(agent_id)
+        if not config:
+            raise ValueError(f"Agente '{agent_id}' non trovato nel catalogo.")
+        return list(config.tools)
 
     def create_all(self) -> dict[str, Runnable[Any, Any]]:
         """Build all agents defined in the catalog."""
