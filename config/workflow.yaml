@@ -1,10 +1,13 @@
+# config/workflow.yaml
+# WORKFLOW DI TEST PER AIDER (Analisi + Coding + Review)
+
 version: 1
 entry: analyst
-max_iterations: 2 # Sufficienti per un'analisi conoscitiva
+max_iterations: 3 # Aumentato a 3 per permettere: 1.Analisi, 2.Coding(Aider), 3.Eventuale Fix
 post_processing:
   - action: log
     params:
-      message: "Analisi architettonica completata"
+      message: "Ciclo di test Aider completato"
       level: INFO
   - action: echo_state
     params:

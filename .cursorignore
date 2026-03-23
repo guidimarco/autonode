@@ -5,5 +5,8 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
+# App
+_meta/
+
 # Security
 .env

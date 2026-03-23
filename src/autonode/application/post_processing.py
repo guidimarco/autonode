@@ -10,7 +10,7 @@ import logging
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from autonode.core.workflow.models import PostProcessStepConfig
+from autonode.core.workflow.models import PostProcessStepModel
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +48,7 @@ _POST_HANDLERS: dict[str, PostHandler] = {
 
 
 def run_post_processing(
-    steps: list[PostProcessStepConfig],
+    steps: list[PostProcessStepModel],
     final_state: Mapping[str, Any],
 ) -> list[dict[str, Any]]:
     """

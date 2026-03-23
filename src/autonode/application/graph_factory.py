@@ -21,16 +21,16 @@ from autonode.core.agents.ports import AgentFactoryPort
 from autonode.core.tools.ports import ToolRegistryPort
 from autonode.core.workflow.models import (
     END_SENTINEL,
-    AgentWorkflowNode,
-    RoutingReviewerFinishOrLoop,
-    RoutingToolCallsOrNext,
-    StateUpdateWorkflowNode,
-    ToolWorkflowNode,
-    VcsProvisionWorkflowNode,
-    VcsSyncWorkflowNode,
-    VerdictFromContentConfig,
-    WorkflowConfig,
-    WorkflowNodeConfig,
+    AgentWorkflowNodeModel,
+    RoutingReviewerFinishOrLoopModel,
+    RoutingToolCallsOrNextModel,
+    StateUpdateWorkflowNodeModel,
+    ToolWorkflowNodeModel,
+    VcsProvisionWorkflowNodeModel,
+    VcsSyncWorkflowNodeModel,
+    VerdictFromContentModel,
+    WorkflowModel,
+    WorkflowNodeModel,
 )
 from autonode.core.workflow.ports import NoOpVcsProvider, VCSProviderPort
 
@@ -47,7 +47,7 @@ def _branch_label_for_session(session_id: str) -> str:
 
 
 def _resolve_tool_names_for_tool_node(
-    node: ToolWorkflowNode, factory: AgentFactoryPort
+    node: ToolWorkflowNodeModel, factory: AgentFactoryPort
 ) -> list[str]:
     explicit = list(node.tool_names or [])
     aid = node.tools_agent_id
@@ -60,7 +60,7 @@ def _resolve_tool_names_for_tool_node(
 
 
 def compile_workflow(
-    workflow: WorkflowConfig,
+    workflow: WorkflowModel,
     factory: AgentFactoryPort,
     registry: ToolRegistryPort,
     checkpointer: Any = None,
@@ -80,7 +80,7 @@ def compile_workflow(
     repo_path = vcs_repo_path if vcs_repo_path is not None else "."
 
     nodes = workflow.nodes
-    by_id: dict[str, WorkflowNodeConfig] = {n.id: n for n in nodes}
+    by_id: dict[str, WorkflowNodeModel] = {n.id: n for n in nodes}
     max_iterations = workflow.max_iterations
 
     builder = StateGraph(GraphWorkflowState)
@@ -89,18 +89,18 @@ def compile_workflow(
 
     for n in nodes:
         nid = n.id
-        if isinstance(n, AgentWorkflowNode):
+        if isinstance(n, AgentWorkflowNodeModel):
             runnable = factory.create_agent(n.agent_id)
             verdict_cfg = n.verdict
             builder.add_node(
                 nid,
                 _make_agent_node_fn(nid, n.agent_id, verdict_cfg, runnable),
             )
-        elif isinstance(n, ToolWorkflowNode):
+        elif isinstance(n, ToolWorkflowNodeModel):
             tool_names = _resolve_tool_names_for_tool_node(n, factory)
             tools = registry.get_tool_list_strict(tool_names)
             builder.add_node(nid, ToolNode(tools))
-        elif isinstance(n, StateUpdateWorkflowNode):
+        elif isinstance(n, StateUpdateWorkflowNodeModel):
             builder.add_node(
                 nid,
                 _make_state_update_fn(
@@ -109,9 +109,9 @@ def compile_workflow(
                     n.clear_verdict,
                 ),
             )
-        elif isinstance(n, VcsProvisionWorkflowNode):
+        elif isinstance(n, VcsProvisionWorkflowNodeModel):
             builder.add_node(nid, _make_vcs_provision_fn(nid, vcs, repo_path))
-        elif isinstance(n, VcsSyncWorkflowNode):
+        elif isinstance(n, VcsSyncWorkflowNodeModel):
             builder.add_node(nid, _make_vcs_sync_fn(nid, n, vcs))
         else:
             raise ValueError(f"Unsupported node kind for id {nid!r}")
@@ -127,9 +127,9 @@ def compile_workflow(
     for src, rule in (workflow.routing or {}).items():
         if src not in by_id:
             raise ValueError(f"workflow: routing source {src!r} not in nodes")
-        if isinstance(rule, RoutingToolCallsOrNext):
+        if isinstance(rule, RoutingToolCallsOrNextModel):
             builder.add_conditional_edges(src, _make_tool_calls_or_next_router(src, rule))
-        elif isinstance(rule, RoutingReviewerFinishOrLoop):
+        elif isinstance(rule, RoutingReviewerFinishOrLoopModel):
             builder.add_conditional_edges(src, _make_reviewer_router(src, rule, max_iterations))
         else:
             raise ValueError(f"Unknown routing rule for {src!r}: {type(rule).__name__}")
@@ -140,7 +140,7 @@ def compile_workflow(
 def _make_agent_node_fn(
     node_id: str,
     agent_id: str,
-    verdict_cfg: VerdictFromContentConfig | None,
+    verdict_cfg: VerdictFromContentModel | None,
     agent_runnable: Any,
 ) -> Any:
     def agent_node(state: GraphWorkflowState) -> dict[str, Any]:
@@ -206,7 +206,7 @@ def _make_vcs_provision_fn(node_id: str, vcs: VCSProviderPort, repo_path: str) -
     return provision_node
 
 
-def _make_vcs_sync_fn(node_id: str, node: VcsSyncWorkflowNode, vcs: VCSProviderPort) -> Any:
+def _make_vcs_sync_fn(node_id: str, node: VcsSyncWorkflowNodeModel, vcs: VCSProviderPort) -> Any:
     def sync_node(state: GraphWorkflowState) -> dict[str, Any]:
         raw_sid = state.get("session_id", "")
         sid = raw_sid if isinstance(raw_sid, str) else str(raw_sid)
@@ -217,7 +217,7 @@ def _make_vcs_sync_fn(node_id: str, node: VcsSyncWorkflowNode, vcs: VCSProviderP
     return sync_node
 
 
-def _make_tool_calls_or_next_router(source_id: str, rule: RoutingToolCallsOrNext) -> Any:
+def _make_tool_calls_or_next_router(source_id: str, rule: RoutingToolCallsOrNextModel) -> Any:
     def route(state: GraphWorkflowState) -> Any:
         last = state["messages"][-1]
         if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
@@ -230,7 +230,7 @@ def _make_tool_calls_or_next_router(source_id: str, rule: RoutingToolCallsOrNext
 
 
 def _make_reviewer_router(
-    source_id: str, rule: RoutingReviewerFinishOrLoop, max_iterations: int
+    source_id: str, rule: RoutingReviewerFinishOrLoopModel, max_iterations: int
 ) -> Any:
     def route(state: GraphWorkflowState) -> Any:
         last: BaseMessage = state["messages"][-1]

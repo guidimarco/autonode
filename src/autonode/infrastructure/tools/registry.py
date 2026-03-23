@@ -77,8 +77,8 @@ class ToolRegistry(ToolRegistryPort):
         self._load_standard_tools()
 
     def _load_standard_tools(self) -> None:
-        # Aider: cwd project root; Git guardrail in aider.py
-        self.register("aider", make_aider_tool("."))
+        # Aider
+        self.register("aider", make_aider_tool(self._root_dir))
 
         # Read-only exploration (scoped to root_dir)
         self.register("get_repository_map", make_get_repository_map_tool(self._root_dir))

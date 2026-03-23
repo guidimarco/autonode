@@ -6,27 +6,17 @@ Raises ValueError with actionable messages on invalid configuration.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-
-from pydantic import TypeAdapter
-
-from autonode.core.agents.models import AgentConfig
-
-if TYPE_CHECKING:
-    from autonode.infrastructure.tools.registry import ToolRegistry
+from autonode.core.agents.models import AgentModel
 
 
-def parse_agents_config(
-    raw_list: Any, tool_registry: ToolRegistry | None = None
-) -> list[AgentConfig]:
+def parse_agents(agents: list[AgentModel]) -> list[AgentModel]:
     """
     Parse a list of dicts into a list of AgentConfig.
 
     Raises:
       ValueError: If the structure is invalid or missing required fields.
     """
-    if not isinstance(raw_list, list):
-        raise ValueError("[parse_agents_config] The content must be a list of agents")
-
-    adapter = TypeAdapter(list[AgentConfig])
-    return adapter.validate_python(raw_list, context={"tool_registry": tool_registry})
+    ids = [a.id for a in agents]
+    if len(ids) != len(set(ids)):
+        raise ValueError("There are agents with duplicate IDs in the configuration")
+    return agents

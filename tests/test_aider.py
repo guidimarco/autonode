@@ -60,3 +60,21 @@ def test_aider_runs_when_clean_repo(tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
     assert "simulated" in out
     assert aider_calls and aider_calls[0][0] == "aider"
+
+
+def test_aider_rejects_non_existing_files_in_clean_repo(tmp_path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
+    (tmp_path / "tracked.txt").write_text("v1\n", encoding="utf-8")
+    subprocess.run(["git", "add", "tracked.txt"], cwd=tmp_path, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", "init"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    tool = make_aider_tool(str(tmp_path))
+    out = tool.invoke({"instruction": "edit", "files": ["missing.txt"]})
+
+    assert "ERRORE" in out
+    assert "file inesistente" in out

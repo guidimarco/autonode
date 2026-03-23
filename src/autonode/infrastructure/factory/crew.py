@@ -12,8 +12,9 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
+from autonode.core.agents.models import AgentModel
 from autonode.core.agents.ports import AgentFactoryPort
-from autonode.infrastructure.config_loader import load_agents_config
+from autonode.infrastructure.config.loader import load_agents_config
 from autonode.infrastructure.tools.registry import ToolRegistry
 
 
@@ -26,7 +27,8 @@ class CrewFactory(AgentFactoryPort):
         tool_registry: ToolRegistry | None = None,
     ):
         self._config_path = config_path
-        self._catalog = load_agents_config(config_path)
+        # Il catalogo ora è un dizionario di AgentModel (Core)
+        self._catalog: dict[str, AgentModel] = load_agents_config(config_path)
         self._tool_registry = tool_registry or ToolRegistry()
 
     def create_agent(self, agent_id: str) -> Runnable[Any, Any]:

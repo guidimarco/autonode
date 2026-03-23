@@ -1,23 +1,23 @@
 from .models import (
     END_SENTINEL,
-    AgentWorkflowNode,
-    FixedEdgeConfig,
+    AgentWorkflowNodeModel,
+    FixedEdgeModel,
     RoutingRule,
-    StateUpdateWorkflowNode,
-    ToolWorkflowNode,
-    WorkflowConfig,
-    WorkflowNodeConfig,
+    StateUpdateWorkflowNodeModel,
+    ToolWorkflowNodeModel,
+    WorkflowModel,
+    WorkflowNodeModel,
 )
-from .parser import parse_workflow_config
+from .parser import parse_workflow
 
 __all__ = [
-    "WorkflowConfig",
-    "WorkflowNodeConfig",
-    "AgentWorkflowNode",
-    "ToolWorkflowNode",
-    "StateUpdateWorkflowNode",
-    "FixedEdgeConfig",
+    "WorkflowModel",
+    "WorkflowNodeModel",
+    "AgentWorkflowNodeModel",
+    "ToolWorkflowNodeModel",
+    "StateUpdateWorkflowNodeModel",
+    "FixedEdgeModel",
     "RoutingRule",
     "END_SENTINEL",
-    "parse_workflow_config",
+    "parse_workflow",
 ]

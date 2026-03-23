@@ -12,13 +12,13 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su verdict o con
 - **LangChain >= 0.3.0**: agenti creati con `langchain_openai.ChatOpenAI` (factory).
 - **LangGraph >= 0.2**: orchestration del workflow in `application/graph_factory.py`.
 - **LangSmith >= 0.1**: logging/tracing dichiarato (tracing configurabile).
-- **LLM su OpenRouter**: `OPEN_ROUTER_API_KEY` + `base_url="https://openrouter.ai/api/v1"` in `infrastructure/agents/factory.py`.
+- **LLM su OpenRouter**: `OPEN_ROUTER_API_KEY` + `base_url="https://openrouter.ai/api/v1"` in `infrastructure/factory/crew.py`.
 - **Aider**: tool `aider` via package `aider-chat` (processo esterno) in `infrastructure/tools/aider.py`.
 - **YAML >= 6.0**: workflow e agent catalog via `pyyaml`.
 
 ## Stato dell'Architettura
 
-- **`core/`**: **solido**. Ports + DTO Pydantic (es. workflow/config) sono separati da framework e concrezioni. Domini implementati:
+- **`core/`**: **solido**. Ports + dataclass `*Model` sono separati da framework e concrezioni. Domini implementati:
   - Agenti;
   - Tools;
   - Workflow.
@@ -27,9 +27,8 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su verdict o con
   - Tool: “Map/Search/PathGuard/Aider”
   - Factory agenti ci sono;
   - VCS provider reale no.
-- **`presentation/`**: **placeholder** per ingressi remoti.
-  - `cli.py` funziona;
-  - `api.py` è solo descrittivo (nessun server FastAPI).
+- **`presentation/`**: entrypoint CLI operativo.
+  - `cli.py` funziona.
 
 ## Feature Implementate
 
@@ -48,7 +47,7 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su verdict o con
 
 - **Shadow worktree/VCS non operativo**: esiste `VCSProviderPort`, ma l’unica implementazione è `NoOpVcsProvider` ⇒ i nodi `vcs_provision`/`vcs_sync` non creano davvero worktree/branch.
 - **Coding end-to-end non dimostrato**: il tool `aider` è registrato, ma il workflow di esempio non lo usa come motore di editing + commit/push.
-- **Ingressi remoti assenti**: manca un’implementazione reale di FastAPI/MCP (nel repo non emerge un server in `presentation/api.py`).
+- **Ingressi remoti assenti**: manca un’implementazione reale di FastAPI/MCP.
 - **Sandbox “fisica” non presente**: c’è enforcement logico su path, ma l’esecuzione (es. `shell`/`aider`) non è isolata a livello container/VM.
 - **Verdetti euristici**: il routing si basa su **substring** dentro `response.content` (`approved_marker`), con rischio di routing non deterministico.
 - **Testing: strumenti sì, integrazione VCS/shadow e coding no**: i test coprono tool/parsing, ma non vedo test end-to-end sul loop coding + VCS.

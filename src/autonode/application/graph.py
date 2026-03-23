@@ -11,11 +11,11 @@ from typing import Any
 from autonode.application.graph_factory import compile_workflow
 from autonode.core.agents.ports import AgentFactoryPort
 from autonode.core.tools.ports import ToolRegistryPort
-from autonode.core.workflow.models import WorkflowConfig
+from autonode.core.workflow.models import WorkflowModel
 
 
 def build_graph(
-    workflow: WorkflowConfig,
+    workflow: WorkflowModel,
     factory: AgentFactoryPort,
     registry: ToolRegistryPort,
     checkpointer: Any = None,

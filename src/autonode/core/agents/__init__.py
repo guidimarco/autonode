@@ -1,5 +1,5 @@
 # src/autonode/core/agents/__init__.py
-from .models import AgentConfig
-from .parser import parse_agents_config
+from .models import AgentModel
+from .parser import parse_agents
 
-__all__ = ["AgentConfig", "parse_agents_config"]
+__all__ = ["AgentModel", "parse_agents"]

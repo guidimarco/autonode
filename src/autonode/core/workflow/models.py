@@ -4,9 +4,8 @@ Workflow configuration DTOs (framework-agnostic).
 Loaded from YAML/JSON in infrastructure; validated when building the graph.
 """
 
-from typing import Annotated, Any, Literal
-
-from pydantic import BaseModel, ConfigDict, Field
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 END_SENTINEL = "__end__"
 
@@ -16,19 +15,21 @@ END_SENTINEL = "__end__"
 # This is defined what's happening after the workflow is complete.
 
 
-class PostProcessStepConfig(BaseModel):
+@dataclass(frozen=True, slots=True)
+class PostProcessStepModel:
     """Declarative post-workflow action (handled by post_processing runner, step 4)."""
 
     action: str
-    params: dict[str, Any] = Field(default_factory=dict)
+    params: dict[str, Any] = field(default_factory=dict)
 
 
-class VerdictFromContentConfig(BaseModel):
+@dataclass(frozen=True, slots=True)
+class VerdictFromContentModel:
     """After agent reply, set `verdict` state from message content (case-insensitive)."""
 
-    approved_marker: str = Field(..., description="The marker to use to approve the content.")
-    approved_verdict: str = Field(..., description="The verdict to use to approve the content.")
-    revision_verdict: str = Field(..., description="The verdict to use to revision the content.")
+    approved_marker: str
+    approved_verdict: str
+    revision_verdict: str
 
 
 # ── Workflow nodes ─────────────────────────────────────────────────────────────
@@ -37,55 +38,54 @@ class VerdictFromContentConfig(BaseModel):
 # This is defined what's happening at each step of the workflow.
 
 
-class AgentWorkflowNode(BaseModel):
+@dataclass(frozen=True, slots=True)
+class AgentWorkflowNodeModel:
     id: str
-    kind: Literal["agent"] = Field(..., description="The kind of the node.")
-    agent_id: str = Field(..., description="The agent ID to use for the node.")
-    verdict: VerdictFromContentConfig | None = Field(
-        None, description="The verdict to use for the node."
-    )
+    kind: Literal["agent"]
+    agent_id: str
+    verdict: VerdictFromContentModel | None = None
 
 
-class ToolWorkflowNode(BaseModel):
+@dataclass(frozen=True, slots=True)
+class ToolWorkflowNodeModel:
     id: str
-    kind: Literal["tool_node"] = Field(..., description="The kind of the node.")
-    tools_agent_id: str | None = Field(None, description="The agent ID to use for the tools.")
-    tool_names: list[str] | None = Field(None, description="The tools to use for the node.")
+    kind: Literal["tool_node"]
+    tools_agent_id: str | None = None
+    tool_names: list[str] | None = None
 
 
-class StateUpdateWorkflowNode(BaseModel):
+@dataclass(frozen=True, slots=True)
+class StateUpdateWorkflowNodeModel:
     id: str
-    kind: Literal["state_update"] = Field(..., description="The kind of the node.")
-    increment_iteration: bool = Field(False, description="Whether to increment the iteration.")
-    clear_verdict: bool = Field(False, description="Whether to clear the verdict.")
+    kind: Literal["state_update"]
+    increment_iteration: bool = False
+    clear_verdict: bool = False
 
 
-class VcsProvisionWorkflowNode(BaseModel):
+@dataclass(frozen=True, slots=True)
+class VcsProvisionWorkflowNodeModel:
     """Prepare shadow worktree before coding agents run."""
 
     id: str
-    kind: Literal["vcs_provision"] = Field(..., description="The kind of the node.")
+    kind: Literal["vcs_provision"]
 
 
-class VcsSyncWorkflowNode(BaseModel):
+@dataclass(frozen=True, slots=True)
+class VcsSyncWorkflowNodeModel:
     """Commit (and optionally push) session worktree after a successful edit round."""
 
     id: str
-    kind: Literal["vcs_sync"] = Field(..., description="The kind of the node.")
-    commit_message: str = Field(
-        default="autonode: sync session {session_id}",
-        description="Commit message template; {session_id} is substituted when present.",
-    )
+    kind: Literal["vcs_sync"]
+    commit_message: str = "autonode: sync session {session_id}"
 
 
-WorkflowNodeConfig = Annotated[
-    AgentWorkflowNode
-    | ToolWorkflowNode
-    | StateUpdateWorkflowNode
-    | VcsProvisionWorkflowNode
-    | VcsSyncWorkflowNode,
-    Field(..., discriminator="kind", description="The node configuration."),
-]
+WorkflowNodeModel = (
+    AgentWorkflowNodeModel
+    | ToolWorkflowNodeModel
+    | StateUpdateWorkflowNodeModel
+    | VcsProvisionWorkflowNodeModel
+    | VcsSyncWorkflowNodeModel
+)
 
 
 # ── Workflow edges ──────────────────────────────────────────────────────────────
@@ -94,54 +94,43 @@ WorkflowNodeConfig = Annotated[
 # This is defined where the workflow should go next.
 
 
-class FixedEdgeConfig(BaseModel):
-    from_node: str = Field(..., description="The node ID to start from.")
-    to: str = Field(..., description="The node ID to go to.")
+@dataclass(frozen=True, slots=True)
+class FixedEdgeModel:
+    from_node: str
+    to: str
 
 
-class RoutingToolCallsOrNext(BaseModel):
-    kind: Literal["tool_calls_or_next"] = Field(..., description="The kind of the routing.")
-    tools_node: str = Field(..., description="The node ID to use for the tools.")
-    next: str = Field(..., description="The node ID to go to next.")
+@dataclass(frozen=True, slots=True)
+class RoutingToolCallsOrNextModel:
+    kind: Literal["tool_calls_or_next"]
+    tools_node: str
+    next: str
 
 
-class RoutingReviewerFinishOrLoop(BaseModel):
-    kind: Literal["reviewer_finish_or_tools_or_revision"] = Field(
-        ..., description="The kind of the routing."
-    )
-    tools_node: str = Field(..., description="The node ID to use for the tools.")
-    revision_node: str = Field(..., description="The node ID to go to revision.")
+@dataclass(frozen=True, slots=True)
+class RoutingReviewerFinishOrLoopModel:
+    kind: Literal["reviewer_finish_or_tools_or_revision"]
+    tools_node: str
+    revision_node: str
 
 
-RoutingRule = Annotated[
-    RoutingToolCallsOrNext | RoutingReviewerFinishOrLoop,
-    Field(..., discriminator="kind", description="The routing configuration."),
-]
+RoutingRule = RoutingToolCallsOrNextModel | RoutingReviewerFinishOrLoopModel
 
 
-# ── Workflow configuration ──────────────────────────────────────────────────────
+# ── Workflow model ──────────────────────────────────────────────────────────────
 
-# The workflow configuration is the complete definition of the workflow.
+# The workflow model is the complete definition of the workflow.
 # This is defined the entire workflow, including the nodes, edges, and routing.
 
 
-class WorkflowConfig(BaseModel):
+@dataclass(frozen=True, slots=True)
+class WorkflowModel:
     """Full workflow definition: topology + routing; agent identities stay in agents.yaml."""
 
-    version: Literal[1] = Field(1, description="The version of the workflow.")
-    entry: str = Field(..., description="The entry node of the workflow.")
-    max_iterations: int = Field(3, description="The maximum number of iterations of the workflow.")
-    nodes: list[WorkflowNodeConfig] = Field(
-        default_factory=list, description="The nodes of the workflow."
-    )
-    edges: list[FixedEdgeConfig] = Field(
-        default_factory=list, description="The edges of the workflow."
-    )
-    routing: dict[str, RoutingRule] = Field(
-        default_factory=dict, description="The routing of the workflow."
-    )
-    post_processing: list[PostProcessStepConfig] = Field(
-        default_factory=list, description="The post-processing of the workflow."
-    )
-
-    model_config = ConfigDict(extra="ignore")
+    version: Literal[1] = 1
+    entry: str = ""
+    max_iterations: int = 3
+    nodes: list[WorkflowNodeModel] = field(default_factory=list)
+    edges: list[FixedEdgeModel] = field(default_factory=list)
+    routing: dict[str, RoutingRule] = field(default_factory=dict)
+    post_processing: list[PostProcessStepModel] = field(default_factory=list)

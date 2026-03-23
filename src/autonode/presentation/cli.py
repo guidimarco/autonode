@@ -15,7 +15,7 @@ from autonode.application.graph import build_graph
 from autonode.application.post_processing import run_post_processing
 from autonode.application.workflow_state import make_initial_graph_state
 from autonode.infrastructure import CrewFactory, ToolRegistry, configure_tracing
-from autonode.infrastructure.workflow_loader import load_workflow_config
+from autonode.infrastructure.config.loader import load_workflow_config
 from autonode.presentation.models import WorkflowRunRequest
 
 load_dotenv()

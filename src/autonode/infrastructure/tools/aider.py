@@ -10,6 +10,8 @@ from pathlib import Path
 
 from langchain_core.tools import BaseTool, tool
 
+from autonode.infrastructure.tools.path_guard import resolve_under_root
+
 
 def _git_worktree_dirty(working_dir: str) -> bool:
     """Return True if ``git status --porcelain`` reports uncommitted changes."""
@@ -47,6 +49,21 @@ def make_aider_tool(working_dir: str = ".") -> BaseTool:
                 "Esegui commit o stash prima di usare Aider."
             )
 
+        normalized_files: list[str] = []
+        for f in files:
+            try:
+                candidate = resolve_under_root(abs_wd, f)
+            except ValueError as e:
+                return f"ERRORE: path file non valido '{f}': {e}"
+            if not candidate.exists():
+                return "ERRORE: file inesistente per Aider: " f"'{f}' (risolto in '{candidate}')"
+            if not candidate.is_file():
+                return (
+                    "ERRORE: il path indicato non e' un file regolare: "
+                    f"'{f}' (risolto in '{candidate}')"
+                )
+            normalized_files.append(str(candidate.relative_to(abs_wd)))
+
         command = [
             "aider",
             "--model",
@@ -60,7 +77,7 @@ def make_aider_tool(working_dir: str = ".") -> BaseTool:
             instruction,
             "--api-key",
             f"openrouter={os.getenv('OPEN_ROUTER_API_KEY')}",
-        ] + list(files)
+        ] + normalized_files
         try:
             result = subprocess.run(
                 command,

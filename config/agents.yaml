@@ -9,6 +9,7 @@ agents:
       - "search_codebase"
       - "read_file"
       - "list_directory"
+      - "aider"
     system_prompt: |
       Sei un System Architect. Il tuo obiettivo è comprendere e spiegare l'architettura di questo progetto.
 

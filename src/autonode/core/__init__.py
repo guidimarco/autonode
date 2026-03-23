@@ -7,10 +7,7 @@ Modules:
 - workflow
 """
 
-from autonode.core.agents.models import AgentConfig
-from autonode.core.workflow.models import WorkflowConfig
+from autonode.core.agents.models import AgentModel
+from autonode.core.workflow.models import WorkflowModel
 
-__all__ = [
-    "AgentConfig",
-    "WorkflowConfig",
-]
+__all__ = ["AgentModel", "WorkflowModel"]

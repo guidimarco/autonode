@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -82,31 +83,41 @@ def test_empty_prompt_uses_default(tmp_path: Path) -> None:
 
 def test_empty_workflow_path_uses_field_default(tmp_path: Path) -> None:
     _, ag = _minimal_yaml_pair(tmp_path)
-    config_wf = Path("config/workflow.yaml")
-    if not config_wf.is_file():
-        pytest.skip("config/workflow.yaml non presente (cwd non root del repo?)")
-    req = WorkflowRunRequest.model_validate(
-        {
-            "workflow_path": "",
-            "agents_path": str(ag),
-            "prompt": "hello world",
-        }
-    )
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "workflow.yaml").write_text("entry: alpha\nnodes: []\n", encoding="utf-8")
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        req = WorkflowRunRequest.model_validate(
+            {
+                "workflow_path": "",
+                "agents_path": str(ag),
+                "prompt": "hello world",
+            }
+        )
+    finally:
+        os.chdir(old_cwd)
     assert req.workflow_path == "config/workflow.yaml"
 
 
 def test_none_workflow_path_uses_field_default(tmp_path: Path) -> None:
     _, ag = _minimal_yaml_pair(tmp_path)
-    config_wf = Path("config/workflow.yaml")
-    if not config_wf.is_file():
-        pytest.skip("config/workflow.yaml non presente (cwd non root del repo?)")
-    req = WorkflowRunRequest.model_validate(
-        {
-            "workflow_path": None,
-            "agents_path": str(ag),
-            "prompt": "hello world",
-        }
-    )
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    (config_dir / "workflow.yaml").write_text("entry: alpha\nnodes: []\n", encoding="utf-8")
+    old_cwd = Path.cwd()
+    try:
+        os.chdir(tmp_path)
+        req = WorkflowRunRequest.model_validate(
+            {
+                "workflow_path": None,
+                "agents_path": str(ag),
+                "prompt": "hello world",
+            }
+        )
+    finally:
+        os.chdir(old_cwd)
     assert req.workflow_path == "config/workflow.yaml"
 
 
