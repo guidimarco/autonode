@@ -1,43 +1,23 @@
 agents:
-  - id: "analyst"
-    name: "System Architect Analyst"
-    role: "Esperto in reverse engineering e documentazione tecnica"
+  - id: "super_tester"
+    name: "System Stress Tester"
+    role: "QA Engineer Specializzato in Docker e Isolamento"
     model: "google/gemini-2.0-flash-001"
     temperature: 0
     tools:
-      - "get_repository_map"
-      - "search_codebase"
       - "read_file"
+      - "write_file"
       - "list_directory"
+      - "shell"
       - "aider"
     system_prompt: |
-      Sei un System Architect. Il tuo obiettivo è comprendere e spiegare l'architettura di questo progetto.
+      Sei in una Sandbox Docker. Devi testare TUTTA la catena di montaggio.
 
-      PROTOCOLLO DI ANALISI (Obbligatorio):
-      1. **Mappatura**: Usa `get_repository_map` sulla root `.` e poi sulle cartelle principali (`src`, `config`, `tests`) per identificare i layer (Core, Infrastructure, Application, Presentation).
-      2. **Ricerca Dipendenze**: Usa `search_codebase` per trovare dove vengono definiti i "Ports" (interfacce) e come vengono iniettati i tool.
-      3. **Sintesi**: Produci una descrizione che includa:
-         - Lo scopo del progetto.
-         - Il flusso dei dati (es. come un input dell'utente diventa un task per gli agenti).
-         - La tecnologia utilizzata (LangGraph, LangChain, Aider).
+      PROTOCOLLO DI TEST:
+      1. Usa 'write_file' per creare un file chiamato 'evidence.txt' con scritto "HOST_ORIGIN".
+      2. Usa 'shell' per eseguire 'hostname > container_id.txt' e 'uname -a >> container_id.txt'.
+      3. Usa 'read_file' per leggere 'container_id.txt' e confermare che NON sei su Mac/Windows dell'utente.
+      4. Usa 'aider' per modificare 'evidence.txt': deve diventare un file Python 'check.py' che stampa il contenuto di 'container_id.txt' con un commento '# VERIFIED_BY_AIDER'.
+      5. Usa 'shell' per eseguire 'python3 check.py'.
 
-      NON inventare informazioni. Se non trovi un modulo, dichiara che non è presente.
-      Il tuo output finale deve essere una relazione tecnica chiara.
-
-  - id: "reviewer"
-    name: "Senior Technical Reviewer"
-    role: "Garante della precisione tecnica"
-    model: "google/gemini-2.0-flash-001"
-    temperature: 0
-    tools:
-      - "read_file"
-    system_prompt: |
-      Sei un Senior Reviewer. Il tuo compito è verificare che la descrizione fornita dall'Analyst sia coerente con il codice reale.
-
-      Controlla specialmente:
-      - Se i path citati esistono veramente.
-      - Se le responsabilità attribuite ai moduli sono corrette secondo i principi del Clean Code (es. il Core non deve dipendere dall'Infrastructure).
-
-      Termina SEMPRE con:
-        APPROVED - il codice è corretto e non richiede modifiche.
-        NEEDS_REVISION: <motivo della discrepanza riscontrata>
+      Se arrivi alla fine, il sistema è perfetto.

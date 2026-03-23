@@ -12,6 +12,7 @@ from autonode.application.graph_factory import compile_workflow
 from autonode.core.agents.ports import AgentFactoryPort
 from autonode.core.tools.ports import ToolRegistryPort
 from autonode.core.workflow.models import WorkflowModel
+from autonode.core.workflow.ports import VCSProviderPort
 
 
 def build_graph(
@@ -19,14 +20,19 @@ def build_graph(
     factory: AgentFactoryPort,
     registry: ToolRegistryPort,
     checkpointer: Any = None,
+    *,
+    vcs_provider: VCSProviderPort,
 ) -> Any:
     """
     Compile workflow from config.
 
-    Invoke with:
-        graph.invoke(
-            make_initial_graph_state(prompt),
-            config={"configurable": {"thread_id": "<task-id>"}},
-        )
+    Invoke with initial state from ``make_initial_graph_state`` (execution_env + workspace
+    from CLI bootstrap) and ``config={"configurable": {"thread_id": "<task-id>"}}``.
     """
-    return compile_workflow(workflow, factory, registry, checkpointer)
+    return compile_workflow(
+        workflow,
+        factory,
+        registry,
+        checkpointer,
+        vcs_provider=vcs_provider,
+    )

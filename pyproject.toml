@@ -15,6 +15,7 @@ dependencies = [
     "langgraph>=0.2",
     "langsmith>=0.1",
     "aider-chat",
+    "docker>=7.0.0",
 ]
 
 [project.optional-dependencies]

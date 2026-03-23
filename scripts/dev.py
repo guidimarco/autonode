@@ -2,6 +2,11 @@ import subprocess
 import sys
 
 
+def _py_m(tool: str, *args: str) -> list[str]:
+    """Invoke a dev CLI via the current interpreter (works when venv bin is not on PATH)."""
+    return [sys.executable, "-m", tool, *args]
+
+
 def _run_commands(commands: list[list[str]]) -> bool:
     failed = False
 
@@ -17,9 +22,9 @@ def _run_commands(commands: list[list[str]]) -> bool:
 
 def lint() -> None:
     commands = [
-        ["ruff", "check", "."],
-        ["mypy", "."],
-        ["black", "--check", "."],
+        _py_m("ruff", "check", "."),
+        _py_m("mypy", "."),
+        _py_m("black", "--check", "."),
     ]
 
     failed = _run_commands(commands)
@@ -33,8 +38,8 @@ def lint() -> None:
 
 def fix() -> None:
     commands = [
-        ["ruff", "check", ".", "--fix"],
-        ["black", "."],
+        _py_m("ruff", "check", ".", "--fix"),
+        _py_m("black", "."),
     ]
 
     failed = _run_commands(commands)

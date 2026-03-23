@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from autonode.infrastructure.tools.path_guard import resolve_under_root, resolved_root
+from autonode.core.sandbox.models import ExecutionEnvironmentModel
+from autonode.infrastructure.tools.path_guard import PathGuard, resolve_under_root, resolved_root
 
 
 def test_resolved_root_expands_and_resolves(tmp_path: Path) -> None:
@@ -50,3 +51,25 @@ def test_resolve_under_root_blocks_traversal_via_nested_dotdot(tmp_path: Path) -
     (root / "inside").mkdir()
     with pytest.raises(ValueError, match="fuori dalla sandbox"):
         resolve_under_root(str(root), "inside/../../..")
+
+
+def test_path_guard_rejects_host_runtime(tmp_path: Path) -> None:
+    env = ExecutionEnvironmentModel(
+        session_id="s",
+        sandbox_id="host-runtime",
+        worktree_host_path=str(tmp_path),
+        container_workspace_path="/workspace",
+    )
+    with pytest.raises(ValueError, match="host-runtime"):
+        PathGuard(env)
+
+
+def test_path_guard_rejects_empty_worktree() -> None:
+    env = ExecutionEnvironmentModel(
+        session_id="s",
+        sandbox_id="container-id",
+        worktree_host_path="   ",
+        container_workspace_path="/workspace",
+    )
+    with pytest.raises(ValueError, match="obbligatorio"):
+        PathGuard(env)

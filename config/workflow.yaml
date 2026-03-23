@@ -1,58 +1,28 @@
-# config/workflow.yaml
-# WORKFLOW DI TEST PER AIDER (Analisi + Coding + Review)
-
 version: 1
-entry: analyst
-max_iterations: 3 # Aumentato a 3 per permettere: 1.Analisi, 2.Coding(Aider), 3.Eventuale Fix
-post_processing:
-  - action: log
-    params:
-      message: "Ciclo di test Aider completato"
-      level: INFO
-  - action: echo_state
-    params:
-      keys: ["verdict", "iteration"]
+entry: tester
+max_iterations: 15
 
 nodes:
-  - id: analyst
+  - id: tester
     kind: agent
-    agent_id: analyst
+    agent_id: super_tester
 
-  - id: analyst_tools
+  - id: tester_tools
     kind: tool_node
-    tools_agent_id: analyst
+    tools_agent_id: super_tester
 
-  - id: reviewer
-    kind: agent
-    agent_id: reviewer
-    verdict:
-      approved_marker: "APPROVED"
-      approved_verdict: "approved"
-      revision_verdict: "needs_revision"
-
-  - id: reviewer_tools
-    kind: tool_node
-    tools_agent_id: reviewer
-
-  - id: prepare_revision
-    kind: state_update
-    increment_iteration: true
-    clear_verdict: true
+  - id: commit_changes
+    kind: vcs_sync
+    commit_message: "feat: sandbox fully verified - session {session_id}"
 
 edges:
-  - from_node: analyst_tools
-    to: analyst
-  - from_node: reviewer_tools
-    to: reviewer
-  - from_node: prepare_revision
-    to: analyst
+  - from_node: tester_tools
+    to: tester
+  - from_node: commit_changes
+    to: "__end__"
 
 routing:
-  analyst:
+  tester:
     kind: tool_calls_or_next
-    tools_node: analyst_tools
-    next: reviewer
-  reviewer:
-    kind: reviewer_finish_or_tools_or_revision
-    tools_node: reviewer_tools
-    revision_node: prepare_revision
+    tools_node: tester_tools
+    next: commit_changes

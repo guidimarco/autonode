@@ -42,7 +42,6 @@ autonode/
 │   │   │   └── crew.py
 │   │   ├── tools/
 │   │   │   ├── registry.py
-│   │   │   ├── aider.py
 │   │   │   ├── path_guard.py
 │   │   │   ├── ignore_rules.py
 │   │   │   ├── repository_map.py
@@ -79,7 +78,6 @@ autonode/
   - `ToolRegistryPort`
 - `core/workflow/ports.py`:
   - `VCSProviderPort`
-  - `NoOpVcsProvider`
 
 Questi contratti disaccoppiano il dominio da adapter concreti.
 
@@ -104,12 +102,13 @@ Flusso:
 
 ## Stato corrente degli entrypoint
 
-- `presentation/cli.py`: entrypoint operativo.
+- `presentation/cli.py`: entrypoint operativo (workflow con gli stessi flag di prima; sottocomando `cleanup` per worktree sotto `.autonode/worktrees/` e container `autonode-sandbox-*`).
+- `infrastructure/vcs/workspace_cleanup.py`: pulizia worktree di sessione per età o in blocco.
 - API/MCP remoti: non presenti nel codice corrente.
 
 ---
 
 ## Nota su VCS
 
-Il contratto `VCSProviderPort` esiste e viene usato in `application/graph_factory.py`.
-L'implementazione attiva di default e' `NoOpVcsProvider`; un adapter VCS reale non e' ancora incluso in `infrastructure/`.
+Il contratto `VCSProviderPort` è obbligatorio in `compile_workflow` / `build_graph`.
+Il CLI usa `GitWorktreeProvider` in `infrastructure/vcs/git_worktree_provider.py`; nei test di compilazione si usa uno stub dedicato sotto `tests/stubs/`.

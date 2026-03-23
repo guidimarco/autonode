@@ -7,9 +7,7 @@ Application layer: depends on core ports + workflow DTOs only (no infrastructure
 from __future__ import annotations
 
 import logging
-import re
-import uuid
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.messages import AIMessage, BaseMessage
 from langgraph.checkpoint.memory import MemorySaver
@@ -32,18 +30,13 @@ from autonode.core.workflow.models import (
     WorkflowModel,
     WorkflowNodeModel,
 )
-from autonode.core.workflow.ports import NoOpVcsProvider, VCSProviderPort
+from autonode.core.workflow.ports import VCSProviderPort
 
 logger = logging.getLogger(__name__)
 
 
 def _edge_target(name: str) -> Any:
     return END if name == END_SENTINEL else name
-
-
-def _branch_label_for_session(session_id: str) -> str:
-    token = re.sub(r"[^a-zA-Z0-9._-]+", "-", session_id.strip()).strip("-") or "session"
-    return f"autonode/session-{token[:80]}"
 
 
 def _resolve_tool_names_for_tool_node(
@@ -65,8 +58,7 @@ def compile_workflow(
     registry: ToolRegistryPort,
     checkpointer: Any = None,
     *,
-    vcs_provider: VCSProviderPort | None = None,
-    vcs_repo_path: str | None = None,
+    vcs_provider: VCSProviderPort,
 ) -> Any:
     """
     Assemble and compile a StateGraph from workflow configuration.
@@ -76,8 +68,7 @@ def compile_workflow(
     if checkpointer is None:
         checkpointer = MemorySaver()
 
-    vcs: VCSProviderPort = vcs_provider if vcs_provider is not None else NoOpVcsProvider()
-    repo_path = vcs_repo_path if vcs_repo_path is not None else "."
+    vcs: VCSProviderPort = vcs_provider
 
     nodes = workflow.nodes
     by_id: dict[str, WorkflowNodeModel] = {n.id: n for n in nodes}
@@ -98,8 +89,7 @@ def compile_workflow(
             )
         elif isinstance(n, ToolWorkflowNodeModel):
             tool_names = _resolve_tool_names_for_tool_node(n, factory)
-            tools = registry.get_tool_list_strict(tool_names)
-            builder.add_node(nid, ToolNode(tools))
+            builder.add_node(nid, _make_dynamic_tool_node_fn(nid, tool_names, registry))
         elif isinstance(n, StateUpdateWorkflowNodeModel):
             builder.add_node(
                 nid,
@@ -110,7 +100,11 @@ def compile_workflow(
                 ),
             )
         elif isinstance(n, VcsProvisionWorkflowNodeModel):
-            builder.add_node(nid, _make_vcs_provision_fn(nid, vcs, repo_path))
+            raise ValueError(
+                f"Workflow node {nid!r}: kind 'vcs_provision' is no longer supported. "
+                "Provision Git worktree and Docker sandbox in the CLI bootstrap before "
+                "invoking the graph."
+            )
         elif isinstance(n, VcsSyncWorkflowNodeModel):
             builder.add_node(nid, _make_vcs_sync_fn(nid, n, vcs))
         else:
@@ -130,7 +124,10 @@ def compile_workflow(
         if isinstance(rule, RoutingToolCallsOrNextModel):
             builder.add_conditional_edges(src, _make_tool_calls_or_next_router(src, rule))
         elif isinstance(rule, RoutingReviewerFinishOrLoopModel):
-            builder.add_conditional_edges(src, _make_reviewer_router(src, rule, max_iterations))
+            builder.add_conditional_edges(
+                src,
+                _make_reviewer_router(src, rule, max_iterations),
+            )
         else:
             raise ValueError(f"Unknown routing rule for {src!r}: {type(rule).__name__}")
 
@@ -181,37 +178,39 @@ def _make_state_update_fn(node_id: str, increment_iteration: bool, clear_verdict
     return state_update_node
 
 
-def _make_vcs_provision_fn(node_id: str, vcs: VCSProviderPort, repo_path: str) -> Any:
-    def provision_node(state: GraphWorkflowState) -> dict[str, Any]:
-        raw_sid = state.get("session_id")
-        sid = str(raw_sid) if raw_sid else str(uuid.uuid4())
-        wt = vcs.setup_session_worktree(sid, repo_path)
-        branch = getattr(vcs, "branch_name", None)
-        if isinstance(branch, str) and branch:
-            bn = branch
-        else:
-            bn = _branch_label_for_session(sid)
-        out: dict[str, Any] = {
-            "session_id": sid,
-            "worktree_path": wt,
-            "branch_name": bn,
-            "current_node": node_id,
-        }
-        ctx = dict(state.get("context") or {})
-        ctx["vcs_repo_path"] = repo_path
-        ctx["worktree_path"] = wt
-        out["context"] = ctx
+def _make_dynamic_tool_node_fn(
+    node_id: str, tool_names: list[str], registry: ToolRegistryPort
+) -> Any:
+    def tool_node(state: GraphWorkflowState) -> dict[str, Any]:
+        execution_env = state.get("execution_env")
+        if execution_env is None:
+            raise RuntimeError(
+                "Workflow state is missing execution_env; isolated sandbox is mandatory "
+                "and host execution is disabled."
+            )
+        dynamic_registry: ToolRegistryPort = registry
+        binder = getattr(registry, "bind_execution_environment", None)
+        if callable(binder):
+            dynamic_registry = cast(ToolRegistryPort, binder(execution_env))
+        tools = dynamic_registry.get_tool_list_strict(tool_names)
+        out = cast(dict[str, Any], ToolNode(tools).invoke(state))
+        out["current_node"] = node_id
         return out
 
-    return provision_node
+    return tool_node
 
 
-def _make_vcs_sync_fn(node_id: str, node: VcsSyncWorkflowNodeModel, vcs: VCSProviderPort) -> Any:
+def _make_vcs_sync_fn(
+    node_id: str,
+    node: VcsSyncWorkflowNodeModel,
+    vcs: VCSProviderPort,
+) -> Any:
     def sync_node(state: GraphWorkflowState) -> dict[str, Any]:
         raw_sid = state.get("session_id", "")
         sid = raw_sid if isinstance(raw_sid, str) else str(raw_sid)
         msg = node.commit_message.replace("{session_id}", sid)
-        commit_hash = vcs.commit_and_push(msg, push=True)
+        worktree = str(state.get("worktree_path", "") or "")
+        commit_hash = vcs.commit_and_push(worktree, msg, push=True)
         return {"last_commit_hash": commit_hash, "current_node": node_id}
 
     return sync_node
@@ -230,7 +229,9 @@ def _make_tool_calls_or_next_router(source_id: str, rule: RoutingToolCallsOrNext
 
 
 def _make_reviewer_router(
-    source_id: str, rule: RoutingReviewerFinishOrLoopModel, max_iterations: int
+    source_id: str,
+    rule: RoutingReviewerFinishOrLoopModel,
+    max_iterations: int,
 ) -> Any:
     def route(state: GraphWorkflowState) -> Any:
         last: BaseMessage = state["messages"][-1]

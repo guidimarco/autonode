@@ -13,7 +13,7 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su verdict o con
 - **LangGraph >= 0.2**: orchestration del workflow in `application/graph_factory.py`.
 - **LangSmith >= 0.1**: logging/tracing dichiarato (tracing configurabile).
 - **LLM su OpenRouter**: `OPEN_ROUTER_API_KEY` + `base_url="https://openrouter.ai/api/v1"` in `infrastructure/factory/crew.py`.
-- **Aider**: tool `aider` via package `aider-chat` (processo esterno) in `infrastructure/tools/aider.py`.
+- **Aider**: tool `aider` via package `aider-chat` (CLI nel container), registrato in `infrastructure/tools/registry.py`.
 - **YAML >= 6.0**: workflow e agent catalog via `pyyaml`.
 
 ## Stato dell'Architettura
@@ -24,31 +24,32 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su verdict o con
   - Workflow.
 - **`application/`**: **quasi completo**. `graph_factory` compila un `StateGraph` da `config/workflow.yaml` e gestisce routing/iterazioni.
 - **`infrastructure/`**: **parzialmente solido**.
-  - Tool: “Map/Search/PathGuard/Aider”
+  - Tool: “Map/Search/PathGuard/Aider” (shell/aider in container quando `ToolRegistry` è costruito con `execution_env` Docker).
   - Factory agenti ci sono;
-  - VCS provider reale no.
+  - VCS: `GitWorktreeProvider` + cleanup worktree; usato dal CLI insieme a `DockerAdapter`.
+  - Sandbox Docker: immagine `autonode-sandbox:latest` costruita da `docker/sandbox.Dockerfile` con contesto `.` (cwd = root repo); `DockerAdapter` inietta nel container le API key note (`OPENAI_*`, `ANTHROPIC_*`, `OPEN_ROUTER_*`) per Aider/provider.
 - **`presentation/`**: entrypoint CLI operativo.
-  - `cli.py` funziona.
+  - `cli.py` esegue il **bootstrap** (Git worktree + container Docker) **prima** di `graph.invoke()`; il grafo non avvia mai tool senza `execution_env` valido nello stato.
 
 ## Feature Implementate
 
 - **Map (`get_repository_map`)**: produce una “repository map” Markdown usando euristiche su dichiarazioni (file estensioni Py/PHP/JS/TS), sempre sotto **sandbox root**.
 - **Search (`search_codebase`)**: cerca stringhe testuali sotto una root; prova `rg` (se presente) e fallback Python; limita query length e numero risultati.
 - **PathGuard (`resolve_under_root` / `resolved_root`)**: blocca **path assoluti** e traversal (`..`) per impedire escape dalla root consentita.
-- **Aider (`aider` tool)**: avvia Aider come processo esterno. Ha un **Git guardrail**: non parte se il repository è **dirty**.
+- **Aider (`aider` tool)**: eseguito nel container Docker della sessione (`docker exec`), non sull’host.
 
 - **Workflow (LangGraph + YAML)**:
-  - `WorkflowConfig` descrive nodi (`agent`, `tool_node`, `state_update`, `vcs_provision`, `vcs_sync`) e routing condizionale.
+  - `WorkflowConfig` descrive nodi (`agent`, `tool_node`, `state_update`, `vcs_sync`) e routing condizionale. Il nodo YAML `vcs_provision` non è più supportato in compilazione: provisioning solo dal CLI bootstrap.
   - `tool_calls_or_next` manda al nodo tools solo se l’ultimo `AIMessage` contiene `tool_calls`.
   - `reviewer_finish_or_tools_or_revision` termina su **`verdict == approved`** oppure su **`iteration >= max_iterations`**.
   - Nel workflow corrente (`config/workflow.yaml`) l’loop “Coder/Reviewer” è modellato come **agent + reviewer**, non come un nodo di coding che usa realmente `aider`.
 
 ## Debito Tecnico e “Punti Oscuri”
 
-- **Shadow worktree/VCS non operativo**: esiste `VCSProviderPort`, ma l’unica implementazione è `NoOpVcsProvider` ⇒ i nodi `vcs_provision`/`vcs_sync` non creano davvero worktree/branch.
+- **`compile_workflow` richiede sempre `vcs_provider`**: il CLI passa `GitWorktreeProvider`; in test si usa uno stub che non simula worktree reali.
 - **Coding end-to-end non dimostrato**: il tool `aider` è registrato, ma il workflow di esempio non lo usa come motore di editing + commit/push.
 - **Ingressi remoti assenti**: manca un’implementazione reale di FastAPI/MCP.
-- **Sandbox “fisica” non presente**: c’è enforcement logico su path, ma l’esecuzione (es. `shell`/`aider`) non è isolata a livello container/VM.
+- **Checkpoint / serializzazione stato**: `execution_env` nello stato del grafo potrebbe non essere serializzabile con checkpointer persistenti (da valutare se si introduce persistenza).
 - **Verdetti euristici**: il routing si basa su **substring** dentro `response.content` (`approved_marker`), con rischio di routing non deterministico.
 - **Testing: strumenti sì, integrazione VCS/shadow e coding no**: i test coprono tool/parsing, ma non vedo test end-to-end sul loop coding + VCS.
 

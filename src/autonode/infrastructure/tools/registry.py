@@ -3,59 +3,66 @@ Tool registry: registers LangChain tools and resolves by name.
 Implements ToolRegistryPort for the application layer.
 
 Security contract:
-    All file-write and shell-execution tools are restricted to `root_dir`
-    (default: ./playground). Path traversal attempts raise ValueError before
-    any I/O or subprocess is started.
+    Tutti i tool file/shell operano sotto ``execution_env.worktree_host_path`` (bind nel container).
+    Path traversal viene bloccato prima di I/O o subprocess.
 """
 
 import os
 import subprocess
+from pathlib import Path
 
 from langchain_community.agent_toolkits import FileManagementToolkit
 from langchain_core.tools import BaseTool, tool
 
+from autonode.core.sandbox.models import ExecutionEnvironmentModel
 from autonode.core.tools.ports import ToolRegistryPort
-from autonode.infrastructure.tools.aider import make_aider_tool
 from autonode.infrastructure.tools.codebase_search import make_search_codebase_tool
+from autonode.infrastructure.tools.path_guard import PathGuard
 from autonode.infrastructure.tools.repository_map import make_get_repository_map_tool
 
 
-def _make_sandboxed_shell_tool(root_dir: str) -> BaseTool:
-    """
-    Return a ShellTool-compatible tool whose commands always run inside
-    `root_dir`. Path traversal via `../` is blocked before subprocess starts.
+def _docker_exec(
+    environment: ExecutionEnvironmentModel,
+    command: list[str],
+    *,
+    env_vars: dict[str, str] | None = None,
+    timeout: int | None = None,
+) -> subprocess.CompletedProcess[str]:
+    env_args: list[str] = []
+    for key, value in (env_vars or {}).items():
+        env_args.extend(["-e", f"{key}={value}"])
+    return subprocess.run(
+        [
+            "docker",
+            "exec",
+            *env_args,
+            "-w",
+            environment.container_workspace_path,
+            environment.sandbox_id,
+            *command,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
 
-    We build a custom @tool instead of subclassing ShellTool to avoid
-    langchain_community version coupling and to keep the sandbox logic explicit.
-    """
-    abs_root = os.path.realpath(root_dir)
 
+def _make_container_shell_tool(
+    environment: ExecutionEnvironmentModel,
+    path_guard: PathGuard,
+) -> BaseTool:
     @tool
     def shell(command: str) -> str:
         """
-        Esegui un comando shell nella sandbox del progetto (playground/).
-        Usa questo tool per lanciare script Python, test, linter o comandi git
-        all'interno della directory di lavoro del task.
-        NON puoi accedere a path esterni alla sandbox.
+        Esegui un comando shell nella sandbox Docker della sessione.
         """
-        # Block naive traversal before exec
-        if ".." in command:
-            return "ERRORE: path traversal ('..') non permesso nella sandbox."
-
-        # Block absolute paths pointing outside the sandbox
-        for token in command.split():
-            if token.startswith("/") and not token.startswith(abs_root):
-                return f"ERRORE: path assoluto non permesso: {token}"
+        try:
+            path_guard.validate_shell_command(command)
+        except ValueError as e:
+            return f"ERRORE: {e}"
 
         try:
-            result = subprocess.run(
-                command,
-                shell=True,
-                capture_output=True,
-                text=True,
-                cwd=abs_root,
-                timeout=60,
-            )
+            result = _docker_exec(environment, ["sh", "-lc", command], timeout=60)
             output = result.stdout
             if result.stderr:
                 output += f"\n[stderr]\n{result.stderr}"
@@ -68,32 +75,107 @@ def _make_sandboxed_shell_tool(root_dir: str) -> BaseTool:
     return shell
 
 
+def _make_container_aider_tool(
+    environment: ExecutionEnvironmentModel,
+    path_guard: PathGuard,
+) -> BaseTool:
+    @tool
+    def aider(instruction: str, files: list[str]) -> str:
+        """
+        Usa Aider nel container Docker della sessione.
+        """
+        normalized_files: list[str] = []
+        for relative_path in files:
+            try:
+                candidate = path_guard.resolve_relative_path(relative_path)
+            except ValueError as e:
+                return f"ERRORE: path file non valido '{relative_path}': {e}"
+            if not candidate.exists() or not candidate.is_file():
+                return f"ERRORE: file inesistente per Aider: '{relative_path}'"
+            normalized_files.append(
+                str(candidate.relative_to(Path(path_guard.host_root))),
+            )
+
+        command = [
+            "aider",
+            "--model",
+            "openrouter/mistralai/devstral-2512",
+            "--yes",
+            "--no-git",
+            "--no-auto-commit",
+            "--cache-prompts",
+            "--no-stream",
+            "--message",
+            instruction,
+            "--api-key",
+            f"openrouter={os.getenv('OPEN_ROUTER_API_KEY')}",
+            *normalized_files,
+        ]
+        try:
+            env_vars = {}
+            api_key = os.getenv("OPEN_ROUTER_API_KEY")
+            if api_key:
+                env_vars["OPEN_ROUTER_API_KEY"] = api_key
+            result = _docker_exec(environment, command, env_vars=env_vars)
+            output = result.stdout
+            if result.stderr:
+                output += f"\n[stderr]\n{result.stderr}"
+            return output or "(nessun output)"
+        except Exception as e:
+            return f"Aider: {e}"
+
+    return aider
+
+
 class ToolRegistry(ToolRegistryPort):
     """Registry of tools by name. Used by agent factory and workflow to resolve tools."""
 
-    def __init__(self, root_dir: str = "./playground"):
-        self._root_dir = root_dir
+    def __init__(self, *, execution_env: ExecutionEnvironmentModel) -> None:
+        if execution_env.sandbox_id == "host-runtime":
+            raise ValueError(
+                "Esecuzione su host disabilitata: usare DockerAdapter "
+                "(sandbox_id != 'host-runtime')."
+            )
+        self._execution_env = execution_env
+        self._path_guard = PathGuard(execution_env)
         self._tools: dict[str, BaseTool] = {}
         self._load_standard_tools()
 
     def _load_standard_tools(self) -> None:
-        # Aider
-        self.register("aider", make_aider_tool(self._root_dir))
+        self.register(
+            "aider",
+            _make_container_aider_tool(self._execution_env, self._path_guard),
+        )
 
         # Read-only exploration (scoped to root_dir)
-        self.register("get_repository_map", make_get_repository_map_tool(self._root_dir))
-        self.register("search_codebase", make_search_codebase_tool(self._root_dir))
+        self.register(
+            "get_repository_map", make_get_repository_map_tool(self._path_guard.host_root)
+        )
+        self.register("search_codebase", make_search_codebase_tool(self._path_guard.host_root))
 
         # File I/O — restricted to root_dir by FileManagementToolkit
         file_toolkit = FileManagementToolkit(
-            root_dir=self._root_dir,
+            root_dir=self._path_guard.host_root,
             selected_tools=["read_file", "write_file", "list_directory", "move_file", "copy_file"],
         ).get_tools()
         for t in file_toolkit:
             self.register(t.name, t)
 
-        # Shell — restricted to root_dir by our sandbox wrapper
-        self.register("shell", _make_sandboxed_shell_tool(self._root_dir))
+        self.register(
+            "shell",
+            _make_container_shell_tool(self._execution_env, self._path_guard),
+        )
+
+    def bind_execution_environment(
+        self,
+        execution_env: ExecutionEnvironmentModel | None,
+    ) -> "ToolRegistry":
+        if execution_env is None:
+            raise ValueError(
+                "bind_execution_environment richiede execution_env; "
+                "nessun fallback sull'host è consentito."
+            )
+        return ToolRegistry(execution_env=execution_env)
 
     def register(self, name: str, tool_obj: BaseTool) -> None:
         self._tools[name] = tool_obj

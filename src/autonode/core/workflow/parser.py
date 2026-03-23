@@ -52,12 +52,13 @@ def _validate_topology(workflow: WorkflowModel) -> None:
             f"[parse_workflow_config] Entry node '{workflow.entry}' not found in nodes"
         )
 
-    # Check if every node reachability
-    for node in node_ids:
+    # Reachability from entry first (orphan nodes), then paths to end — stable, clearer errors.
+    for node in sorted(node_ids):
         if not nx.has_path(G, workflow.entry, node):
             raise ValueError(
                 f"[parse_workflow_config] Entry node '{workflow.entry}' cannot reach node '{node}'"
             )
+    for node in sorted(node_ids):
         if not nx.has_path(G, node, END_SENTINEL):
             raise ValueError(f"[parse_workflow_config] Node '{node}' cannot reach the end sentinel")
 

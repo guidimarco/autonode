@@ -24,12 +24,13 @@ class CrewFactory(AgentFactoryPort):
     def __init__(
         self,
         config_path: str = "config/agents.yaml",
-        tool_registry: ToolRegistry | None = None,
+        *,
+        tool_registry: ToolRegistry,
     ):
         self._config_path = config_path
         # Il catalogo ora è un dizionario di AgentModel (Core)
         self._catalog: dict[str, AgentModel] = load_agents_config(config_path)
-        self._tool_registry = tool_registry or ToolRegistry()
+        self._tool_registry = tool_registry
 
     def create_agent(self, agent_id: str) -> Runnable[Any, Any]:
         """

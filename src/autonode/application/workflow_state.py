@@ -12,6 +12,8 @@ from typing import Annotated, Any, NotRequired, TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph.message import add_messages
 
+from autonode.core.sandbox.models import ExecutionEnvironmentModel, WorkspaceBindingModel
+
 
 def _merge_shallow(left: dict[str, Any], right: dict[str, Any] | None) -> dict[str, Any]:
     if right is None:
@@ -27,6 +29,10 @@ class GraphWorkflowState(TypedDict):
     verdict: str
     context: Annotated[dict[str, Any], _merge_shallow]
     artifacts: Annotated[dict[str, Any], _merge_shallow]
+    execution_env: ExecutionEnvironmentModel
+    session_id: str
+    worktree_path: str
+    branch_name: str
     status: NotRequired[str]
     current_node: NotRequired[str]
     last_router_decision: NotRequired[str]
@@ -35,14 +41,27 @@ class GraphWorkflowState(TypedDict):
 def make_initial_graph_state(
     prompt: str,
     *,
+    execution_env: ExecutionEnvironmentModel,
+    workspace: WorkspaceBindingModel,
     context: dict[str, Any] | None = None,
     artifacts: dict[str, Any] | None = None,
 ) -> GraphWorkflowState:
     """Build initial state for invoke/stream with thread_id in config."""
+    if workspace.session_id != execution_env.session_id:
+        raise ValueError("workspace.session_id must match execution_env.session_id")
+    if workspace.worktree_host_path != execution_env.worktree_host_path:
+        raise ValueError("workspace.worktree_host_path must match execution_env.worktree_host_path")
+    ctx = dict(context or {})
+    ctx.setdefault("vcs_repo_path", workspace.repo_host_path)
+    ctx.setdefault("worktree_path", workspace.worktree_host_path)
     return GraphWorkflowState(
         messages=[HumanMessage(content=prompt)],
         iteration=0,
         verdict="",
-        context=context or {},
+        context=ctx,
         artifacts=artifacts or {},
+        execution_env=execution_env,
+        session_id=workspace.session_id,
+        worktree_path=workspace.worktree_host_path,
+        branch_name=workspace.branch_name,
     )

@@ -1,0 +1,129 @@
+"""Test DockerAdapter: immagine sandbox locale e build."""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from autonode.infrastructure.sandbox.docker_adapter import DockerAdapter
+from docker import errors as docker_errors  # type: ignore[attr-defined]
+
+
+@pytest.fixture
+def mock_docker_client() -> Iterator[MagicMock]:
+    with patch("autonode.infrastructure.sandbox.docker_adapter.docker.from_env") as from_env:
+        client = MagicMock()
+        from_env.return_value = client
+        yield client
+
+
+def _fake_repo_with_dockerfile(tmp_path: Path) -> None:
+    d = tmp_path / "docker"
+    d.mkdir(parents=True)
+    (d / "sandbox.Dockerfile").write_text("FROM scratch\n", encoding="utf-8")
+
+
+def test_prepare_skips_build_when_image_exists(mock_docker_client: MagicMock) -> None:
+    mock_docker_client.images.get.return_value = object()
+    DockerAdapter(prepare_image=True, force_rebuild=False)
+    mock_docker_client.images.get.assert_called_once()
+    mock_docker_client.images.build.assert_not_called()
+
+
+def test_prepare_builds_when_image_missing(
+    mock_docker_client: MagicMock,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fake_repo_with_dockerfile(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    mock_docker_client.images.get.side_effect = docker_errors.ImageNotFound("missing")
+    mock_docker_client.images.build.return_value = (MagicMock(), [])
+    DockerAdapter(prepare_image=True, force_rebuild=False)
+    mock_docker_client.images.build.assert_called_once()
+    call_kw = mock_docker_client.images.build.call_args.kwargs
+    assert call_kw["tag"] == "autonode-sandbox:latest"
+    assert call_kw["dockerfile"] == "docker/sandbox.Dockerfile"
+    assert call_kw["path"] == "."
+
+
+def test_force_rebuild_calls_build(
+    mock_docker_client: MagicMock,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fake_repo_with_dockerfile(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    mock_docker_client.images.build.return_value = (MagicMock(), [])
+    DockerAdapter(prepare_image=True, force_rebuild=True)
+    mock_docker_client.images.get.assert_not_called()
+    mock_docker_client.images.build.assert_called_once()
+
+
+def test_missing_dockerfile_exits(
+    mock_docker_client: MagicMock,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    mock_docker_client.images.get.side_effect = docker_errors.ImageNotFound("missing")
+    with pytest.raises(SystemExit) as exc:
+        DockerAdapter(prepare_image=True, force_rebuild=False)
+    assert exc.value.code == 1
+
+
+def test_build_stream_error_exits(
+    mock_docker_client: MagicMock,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _fake_repo_with_dockerfile(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    mock_docker_client.images.get.side_effect = docker_errors.ImageNotFound("missing")
+    mock_docker_client.images.build.return_value = (
+        MagicMock(),
+        iter([{"error": "compile failed"}]),
+    )
+    with pytest.raises(SystemExit) as exc:
+        DockerAdapter(prepare_image=True, force_rebuild=False)
+    assert exc.value.code == 1
+
+
+def test_prepare_image_false_skips(mock_docker_client: MagicMock) -> None:
+    DockerAdapter(prepare_image=False)
+    mock_docker_client.images.get.assert_not_called()
+    mock_docker_client.images.build.assert_not_called()
+
+
+def test_provision_passes_llm_env_vars(
+    mock_docker_client: MagicMock,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_docker_client.images.get.return_value = object()
+    monkeypatch.setenv("OPEN_ROUTER_API_KEY", "sk-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-openai")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    adapter = DockerAdapter(prepare_image=True, force_rebuild=False)
+    container_mock = MagicMock()
+    container_mock.id = "abc123"
+    mock_docker_client.containers.run.return_value = container_mock
+
+    from autonode.core.sandbox.models import WorkspaceBindingModel
+
+    ws = WorkspaceBindingModel(
+        session_id="s1",
+        repo_host_path=str(tmp_path),
+        worktree_host_path=str(tmp_path),
+        branch_name="autonode/s1",
+    )
+    adapter.provision_environment(ws)
+
+    env = mock_docker_client.containers.run.call_args.kwargs.get("environment") or {}
+    assert env.get("OPEN_ROUTER_API_KEY") == "sk-test"
+    assert env.get("OPENAI_API_KEY") == "sk-openai"
+    assert "ANTHROPIC_API_KEY" not in env
