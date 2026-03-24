@@ -12,6 +12,7 @@ from typing import Annotated, Any, NotRequired, TypedDict
 from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph.message import add_messages
 
+from autonode.core.agents.models import ReviewVerdictModel
 from autonode.core.sandbox.models import ExecutionEnvironmentModel, WorkspaceBindingModel
 
 
@@ -21,12 +22,21 @@ def _merge_shallow(left: dict[str, Any], right: dict[str, Any] | None) -> dict[s
     return {**left, **right}
 
 
+def default_review_verdict() -> ReviewVerdictModel:
+    """Initial / cleared reviewer state (not approved, no feedback)."""
+    return ReviewVerdictModel(
+        is_approved=False,
+        feedback="",
+        missing_requirements=[],
+    )
+
+
 class GraphWorkflowState(TypedDict):
     """Extensible workflow state (short-term / thread memory via checkpointer)."""
 
     messages: Annotated[list[BaseMessage], add_messages]
     iteration: int
-    verdict: str
+    review_verdict: ReviewVerdictModel
     context: Annotated[dict[str, Any], _merge_shallow]
     artifacts: Annotated[dict[str, Any], _merge_shallow]
     execution_env: ExecutionEnvironmentModel
@@ -57,7 +67,7 @@ def make_initial_graph_state(
     return GraphWorkflowState(
         messages=[HumanMessage(content=prompt)],
         iteration=0,
-        verdict="",
+        review_verdict=default_review_verdict(),
         context=ctx,
         artifacts=artifacts or {},
         execution_env=execution_env,

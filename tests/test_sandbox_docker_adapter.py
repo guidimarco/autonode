@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from autonode.core.sandbox.exceptions import SandboxImageNotFoundError
 from autonode.infrastructure.sandbox.docker_adapter import DockerAdapter
 from docker import errors as docker_errors  # type: ignore[attr-defined]
 
@@ -63,19 +64,18 @@ def test_force_rebuild_calls_build(
     mock_docker_client.images.build.assert_called_once()
 
 
-def test_missing_dockerfile_exits(
+def test_missing_dockerfile_raises(
     mock_docker_client: MagicMock,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.chdir(tmp_path)
     mock_docker_client.images.get.side_effect = docker_errors.ImageNotFound("missing")
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(SandboxImageNotFoundError, match="Dockerfile non trovato"):
         DockerAdapter(prepare_image=True, force_rebuild=False)
-    assert exc.value.code == 1
 
 
-def test_build_stream_error_exits(
+def test_build_stream_error_raises(
     mock_docker_client: MagicMock,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -87,9 +87,8 @@ def test_build_stream_error_exits(
         MagicMock(),
         iter([{"error": "compile failed"}]),
     )
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(SandboxImageNotFoundError, match="Build immagine sandbox fallita"):
         DockerAdapter(prepare_image=True, force_rebuild=False)
-    assert exc.value.code == 1
 
 
 def test_prepare_image_false_skips(mock_docker_client: MagicMock) -> None:

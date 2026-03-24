@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
@@ -26,14 +27,25 @@ class WorkflowRunRequest(BaseModel):
         min_length=5,
         description="The prompt to run the workflow with.",
     )
+    repo_path: str = Field(
+        default=".",
+        description="Git root repository path (directory that contains .git).",
+    )
+    thread_id: str | None = Field(
+        default=None,
+        description="Stable id for worktree/session; generated if omitted.",
+    )
+    no_cleanup: bool = Field(
+        default=False,
+        description="Whether to cleanup the repository after the workflow run.",
+    )
 
     @field_validator("workflow_path", "agents_path", "prompt", mode="before")
     @classmethod
     def set_default_if_none(cls, v: str | None, info: ValidationInfo) -> str:
         if v is None or v == "":
             field_name = info.field_name
-            if field_name is None:
-                raise ValueError(f"The field {info.field_name} is missing.")
+            assert field_name is not None
             field = cls.model_fields.get(field_name)
             if field and field.default is not None:
                 return str(field.default)
@@ -45,4 +57,14 @@ class WorkflowRunRequest(BaseModel):
     def validate_path(cls, v: str) -> str:
         if not os.path.exists(v):
             raise ValueError(f"The path {v} does not exist.")
+        return v
+
+    @field_validator("repo_path")
+    @classmethod
+    def is_git_repo(cls, v: str) -> str:
+        path = Path(v)
+        if not path.is_dir():
+            raise ValueError(f"The path {v} does not exist.")
+        if not (path / ".git").exists():
+            raise ValueError(f"The path {v} is not a Git repository.")
         return v

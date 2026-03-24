@@ -7,20 +7,24 @@ La CLI va eseguita dalla root del repository: contesto di build ``.`` e Dockerfi
 
 from __future__ import annotations
 
+import logging
 import os
-import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 from docker.client import DockerClient
 
 import docker
+from autonode.core.sandbox.exceptions import SandboxImageNotFoundError
 from autonode.core.sandbox.models import ExecutionEnvironmentModel, WorkspaceBindingModel
 from autonode.core.sandbox.ports import SandboxProviderPort
 from docker import errors as docker_errors  # type: ignore[attr-defined]
 
+logger = logging.getLogger(__name__)
+
 SANDBOX_IMAGE_TAG = "autonode-sandbox:latest"
 SANDBOX_DOCKERFILE = "docker/sandbox.Dockerfile"
+SANDBOX_CONTAINER_PREFIX = "autonode-sandbox-"
 
 _SANDBOX_ENV_KEYS = (
     "OPENAI_API_KEY",
@@ -35,8 +39,7 @@ def _host_env_for_container() -> dict[str, str]:
 
 
 def _sandbox_image_abort(message: str) -> None:
-    print(message, file=sys.stderr)
-    sys.exit(1)
+    raise SandboxImageNotFoundError(message)
 
 
 class DockerAdapter(SandboxProviderPort):
@@ -111,7 +114,7 @@ class DockerAdapter(SandboxProviderPort):
             command=self._startup_command,
             detach=True,
             tty=True,
-            name=f"autonode-sandbox-{workspace.session_id}",
+            name=f"{SANDBOX_CONTAINER_PREFIX}{workspace.session_id}",
             working_dir=self._container_workspace_path,
             environment=env,
             volumes={
@@ -142,7 +145,7 @@ class DockerAdapter(SandboxProviderPort):
 
     def list_active_sandboxes(self) -> list[str]:
         """Return names of containers whose name starts with ``autonode-sandbox-``."""
-        prefix = "autonode-sandbox-"
+        prefix = SANDBOX_CONTAINER_PREFIX
         names: list[str] = []
         for container in self._client.containers.list(all=True):
             name = (container.name or "").lstrip("/")
@@ -162,7 +165,7 @@ class DockerAdapter(SandboxProviderPort):
 
     def remove_stale_autonode_sandboxes(self, ttl_days: float = 1.0) -> list[str]:
         """Remove autonode sandbox containers older than ``ttl_days`` (Docker Created)."""
-        prefix = "autonode-sandbox-"
+        prefix = SANDBOX_CONTAINER_PREFIX
         removed: list[str] = []
         for container in self._client.containers.list(all=True):
             name = (container.name or "").lstrip("/")
@@ -181,6 +184,15 @@ class DockerAdapter(SandboxProviderPort):
             except docker_errors.NotFound:
                 continue
         return sorted(removed)
+
+    def remove_session_sandbox(self, session_id: str) -> None:
+        name = f"{SANDBOX_CONTAINER_PREFIX}{session_id}"
+        self.remove_autonode_sandboxes([name])
+        logger.info("Removed sandbox: %s", name)
+
+    def remove_all_session_sandboxes(self) -> None:
+        removed = self.remove_autonode_sandboxes()
+        logger.info("Removed all sandbox containers: %s", removed)
 
     def remove_autonode_sandboxes(self, names: list[str] | None = None) -> list[str]:
         """

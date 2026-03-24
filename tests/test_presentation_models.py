@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from autonode.presentation.models import WorkflowRunRequest
+from autonode.presentation.workflow.models import WorkflowRunRequest
 
 TESTDATA = Path(__file__).resolve().parent / "testdata"
 

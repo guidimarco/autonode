@@ -19,9 +19,7 @@ from autonode.core.workflow.models import (
     RoutingToolCallsOrNextModel,
     StateUpdateWorkflowNodeModel,
     ToolWorkflowNodeModel,
-    VcsProvisionWorkflowNodeModel,
     VcsSyncWorkflowNodeModel,
-    VerdictFromContentModel,
     WorkflowModel,
 )
 
@@ -34,24 +32,11 @@ class PostProcessStepYamlSchema(BaseModel):
         return PostProcessStepModel(action=self.action, params=dict(self.params))
 
 
-class VerdictYamlSchema(BaseModel):
-    approved_marker: str
-    approved_verdict: str
-    revision_verdict: str
-
-    def to_core(self) -> VerdictFromContentModel:
-        return VerdictFromContentModel(
-            approved_marker=self.approved_marker,
-            approved_verdict=self.approved_verdict,
-            revision_verdict=self.revision_verdict,
-        )
-
-
 class AgentWorkflowNodeYamlSchema(BaseModel):
     id: str
     kind: Literal["agent"]
     agent_id: str
-    verdict: VerdictYamlSchema | None = None
+    structured_review: bool = False
 
     model_config = ConfigDict(frozen=True)
 
@@ -60,7 +45,7 @@ class AgentWorkflowNodeYamlSchema(BaseModel):
             id=self.id,
             kind="agent",
             agent_id=self.agent_id,
-            verdict=self.verdict.to_core() if self.verdict else None,
+            structured_review=self.structured_review,
         )
 
 
@@ -98,16 +83,6 @@ class StateUpdateWorkflowNodeYamlSchema(BaseModel):
         )
 
 
-class VcsProvisionWorkflowNodeYamlSchema(BaseModel):
-    id: str
-    kind: Literal["vcs_provision"]
-
-    model_config = ConfigDict(frozen=True)
-
-    def to_core(self) -> VcsProvisionWorkflowNodeModel:
-        return VcsProvisionWorkflowNodeModel(id=self.id, kind="vcs_provision")
-
-
 class VcsSyncWorkflowNodeYamlSchema(BaseModel):
     id: str
     kind: Literal["vcs_sync"]
@@ -127,7 +102,6 @@ WorkflowNodeYamlSchema = Annotated[
     AgentWorkflowNodeYamlSchema
     | ToolWorkflowNodeYamlSchema
     | StateUpdateWorkflowNodeYamlSchema
-    | VcsProvisionWorkflowNodeYamlSchema
     | VcsSyncWorkflowNodeYamlSchema,
     Field(discriminator="kind"),
 ]

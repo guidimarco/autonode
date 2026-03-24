@@ -20,6 +20,14 @@ from autonode.infrastructure.tools.codebase_search import make_search_codebase_t
 from autonode.infrastructure.tools.path_guard import PathGuard
 from autonode.infrastructure.tools.repository_map import make_get_repository_map_tool
 
+_DEFAULT_AIDER_MODEL = "openrouter/mistralai/devstral-2512"
+
+
+def resolve_aider_model() -> str:
+    """Model id passed to Aider's ``--model`` (env ``AIDER_MODEL`` or default)."""
+    v = os.getenv("AIDER_MODEL", "").strip()
+    return v or _DEFAULT_AIDER_MODEL
+
 
 def _docker_exec(
     environment: ExecutionEnvironmentModel,
@@ -99,7 +107,7 @@ def _make_container_aider_tool(
         command = [
             "aider",
             "--model",
-            "openrouter/mistralai/devstral-2512",
+            resolve_aider_model(),
             "--yes",
             "--no-git",
             "--no-auto-commit",

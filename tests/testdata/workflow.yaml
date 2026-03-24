@@ -21,10 +21,7 @@ nodes:
   - id: beta
     kind: agent
     agent_id: beta_agent
-    verdict:
-      approved_marker: "OK"
-      approved_verdict: "approved"
-      revision_verdict: "retry"
+    structured_review: true
 
   - id: beta_tools
     kind: tool_node

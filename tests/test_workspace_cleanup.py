@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from autonode.infrastructure.vcs import workspace_cleanup
+from autonode.infrastructure.vcs.git_worktree_provider import GitWorktreeProvider
 
 
 def _touch_dir_old(path: Path, days_ago: float) -> None:
@@ -34,16 +34,15 @@ def test_cleanup_orphaned_worktrees_removes_only_stale(repo_with_worktrees: Path
         calls.append(("run", tuple(cmd)))
         return MagicMock(returncode=0, stdout="", stderr="")
 
+    provider = GitWorktreeProvider()
     with patch(
-        "autonode.infrastructure.vcs.workspace_cleanup.subprocess.run",
+        "autonode.infrastructure.vcs.git_worktree_provider.subprocess.run",
         side_effect=fake_run,
     ):
         with patch(
-            "autonode.infrastructure.vcs.workspace_cleanup.shutil.rmtree",
+            "autonode.infrastructure.vcs.git_worktree_provider.shutil.rmtree",
         ) as rmtree:
-            removed = workspace_cleanup.cleanup_orphaned_worktrees(
-                str(repo_with_worktrees), ttl_days=1
-            )
+            removed = provider.cleanup_orphaned_worktrees(str(repo_with_worktrees), ttl_days=1)
 
     stale = repo_with_worktrees / ".autonode" / "worktrees" / "stale"
     assert str(stale) in removed
@@ -59,23 +58,26 @@ def test_cleanup_orphaned_worktrees_removes_only_stale(repo_with_worktrees: Path
 def test_cleanup_orphaned_worktrees_empty_root(tmp_path: Path) -> None:
     repo = tmp_path / "empty"
     repo.mkdir()
-    assert workspace_cleanup.cleanup_orphaned_worktrees(str(repo), ttl_days=1) == []
+    provider = GitWorktreeProvider()
+    assert provider.cleanup_orphaned_worktrees(str(repo), ttl_days=1) == []
 
 
-def test_cleanup_all_session_worktrees(repo_with_worktrees: Path) -> None:
+def test_remove_all_session_worktrees(repo_with_worktrees: Path) -> None:
     calls: list[tuple[str, tuple[str, ...]]] = []
 
     def fake_run(cmd: list[str], **kwargs: object) -> MagicMock:
         calls.append(("run", tuple(cmd)))
         return MagicMock(returncode=0, stdout="", stderr="")
 
+    provider = GitWorktreeProvider()
     with patch(
-        "autonode.infrastructure.vcs.workspace_cleanup.subprocess.run",
+        "autonode.infrastructure.vcs.git_worktree_provider.subprocess.run",
         side_effect=fake_run,
     ):
-        with patch("autonode.infrastructure.vcs.workspace_cleanup.shutil.rmtree"):
-            removed = workspace_cleanup.cleanup_all_session_worktrees(str(repo_with_worktrees))
+        with patch("autonode.infrastructure.vcs.git_worktree_provider.shutil.rmtree"):
+            provider.remove_all_session_worktrees(str(repo_with_worktrees))
 
-    assert len(removed) == 2
     prunes = [c for c in calls if c[0] == "run" and "prune" in c[1]]
     assert len(prunes) == 1
+    removes = [c for c in calls if c[0] == "run" and "remove" in c[1]]
+    assert len(removes) >= 2

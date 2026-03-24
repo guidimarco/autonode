@@ -17,3 +17,11 @@ class SandboxProviderPort(ABC):
     @abstractmethod
     def release_environment(self, environment: ExecutionEnvironmentModel) -> None:
         """Release runtime resources associated with a session environment."""
+
+    @abstractmethod
+    def remove_session_sandbox(self, session_id: str) -> None:
+        """Remove session sandbox."""
+
+    @abstractmethod
+    def remove_all_session_sandboxes(self) -> None:
+        """Remove all session sandboxes."""

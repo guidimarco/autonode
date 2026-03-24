@@ -14,7 +14,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from autonode.application.workflow_state import GraphWorkflowState
+from autonode.application.workflow.state import GraphWorkflowState, default_review_verdict
+from autonode.core.agents.models import ReviewVerdictModel
 from autonode.core.agents.ports import AgentFactoryPort
 from autonode.core.tools.ports import ToolRegistryPort
 from autonode.core.workflow.models import (
@@ -24,9 +25,7 @@ from autonode.core.workflow.models import (
     RoutingToolCallsOrNextModel,
     StateUpdateWorkflowNodeModel,
     ToolWorkflowNodeModel,
-    VcsProvisionWorkflowNodeModel,
     VcsSyncWorkflowNodeModel,
-    VerdictFromContentModel,
     WorkflowModel,
     WorkflowNodeModel,
 )
@@ -52,7 +51,15 @@ def _resolve_tool_names_for_tool_node(
     return explicit
 
 
-def compile_workflow(
+def _fallback_structured_review(reason: str) -> ReviewVerdictModel:
+    return ReviewVerdictModel(
+        is_approved=False,
+        feedback=reason,
+        missing_requirements=[],
+    )
+
+
+def build_graph(
     workflow: WorkflowModel,
     factory: AgentFactoryPort,
     registry: ToolRegistryPort,
@@ -81,11 +88,13 @@ def compile_workflow(
     for n in nodes:
         nid = n.id
         if isinstance(n, AgentWorkflowNodeModel):
-            runnable = factory.create_agent(n.agent_id)
-            verdict_cfg = n.verdict
+            create_kw: dict[str, Any] = {}
+            if n.structured_review:
+                create_kw["structured_output_model"] = ReviewVerdictModel
+            runnable = factory.create_agent(n.agent_id, **create_kw)
             builder.add_node(
                 nid,
-                _make_agent_node_fn(nid, n.agent_id, verdict_cfg, runnable),
+                _make_agent_node_fn(nid, n.agent_id, n.structured_review, runnable),
             )
         elif isinstance(n, ToolWorkflowNodeModel):
             tool_names = _resolve_tool_names_for_tool_node(n, factory)
@@ -99,16 +108,8 @@ def compile_workflow(
                     n.clear_verdict,
                 ),
             )
-        elif isinstance(n, VcsProvisionWorkflowNodeModel):
-            raise ValueError(
-                f"Workflow node {nid!r}: kind 'vcs_provision' is no longer supported. "
-                "Provision Git worktree and Docker sandbox in the CLI bootstrap before "
-                "invoking the graph."
-            )
         elif isinstance(n, VcsSyncWorkflowNodeModel):
             builder.add_node(nid, _make_vcs_sync_fn(nid, n, vcs))
-        else:
-            raise ValueError(f"Unsupported node kind for id {nid!r}")
 
     # ── Fixed edges ──────────────────────────────────────────────────────────
 
@@ -137,7 +138,7 @@ def compile_workflow(
 def _make_agent_node_fn(
     node_id: str,
     agent_id: str,
-    verdict_cfg: VerdictFromContentModel | None,
+    structured_review: bool,
     agent_runnable: Any,
 ) -> Any:
     def agent_node(state: GraphWorkflowState) -> dict[str, Any]:
@@ -149,16 +150,44 @@ def _make_agent_node_fn(
             len(state["messages"]),
         )
         response = agent_runnable.invoke(state["messages"])
-        out: dict[str, Any] = {"messages": [response], "current_node": node_id}
-        if verdict_cfg:
-            content = response.content if isinstance(response.content, str) else ""
-            marker = verdict_cfg.approved_marker.upper()
-            approved = marker in content.upper()
-            if approved:
-                out["verdict"] = verdict_cfg.approved_verdict
+        if structured_review:
+            if (
+                isinstance(response, dict)
+                and isinstance(response.get("message"), BaseMessage)
+                and isinstance(response.get("review_verdict"), ReviewVerdictModel)
+            ):
+                raw_msg = cast(BaseMessage, response["message"])
+                verdict = cast(ReviewVerdictModel, response["review_verdict"])
+                out: dict[str, Any] = {
+                    "messages": [raw_msg],
+                    "review_verdict": verdict,
+                    "current_node": node_id,
+                }
             else:
-                out["verdict"] = verdict_cfg.revision_verdict
-            logger.info("[%s] verdict=%s", node_id, out["verdict"])
+                fallback_msg: BaseMessage
+                if isinstance(response, BaseMessage):
+                    fallback_msg = response
+                else:
+                    fallback_msg = AIMessage(content=str(response))
+                out = {
+                    "messages": [fallback_msg],
+                    "review_verdict": _fallback_structured_review(
+                        "Risposta strutturata reviewer mancante o non valida."
+                    ),
+                    "current_node": node_id,
+                }
+            logger.info(
+                "[%s] structured review is_approved=%s",
+                node_id,
+                out["review_verdict"].is_approved,
+            )
+        else:
+            msg_out: BaseMessage
+            if isinstance(response, BaseMessage):
+                msg_out = response
+            else:
+                msg_out = AIMessage(content=str(response))
+            out = {"messages": [msg_out], "current_node": node_id}
         return out
 
     return agent_node
@@ -172,7 +201,7 @@ def _make_state_update_fn(node_id: str, increment_iteration: bool, clear_verdict
             logger.info("[%s] iteration %s → %s", node_id, state["iteration"], new_iter)
             out["iteration"] = new_iter
         if clear_verdict:
-            out["verdict"] = ""
+            out["review_verdict"] = default_review_verdict()
         return out
 
     return state_update_node
@@ -237,11 +266,11 @@ def _make_reviewer_router(
         last: BaseMessage = state["messages"][-1]
         if isinstance(last, AIMessage) and getattr(last, "tool_calls", None):
             decision: Any = rule.tools_node
-        elif state["verdict"] == "approved" or state["iteration"] >= max_iterations:
+        elif state["review_verdict"].is_approved or state["iteration"] >= max_iterations:
             logger.info(
-                "[%s] done | verdict=%s | iteration=%s",
+                "[%s] done | is_approved=%s | iteration=%s",
                 source_id,
-                state["verdict"],
+                state["review_verdict"].is_approved,
                 state["iteration"],
             )
             decision = END

@@ -9,6 +9,7 @@ import yaml
 from pydantic import ValidationError
 
 from autonode.core.workflow import parse_workflow
+from autonode.core.workflow.models import AgentWorkflowNodeModel
 from autonode.infrastructure.config.workflow_schema import WorkflowYamlSchema
 
 TESTDATA = Path(__file__).resolve().parent / "testdata"
@@ -24,6 +25,9 @@ def test_testdata_workflow_yaml_parses() -> None:
     assert len(cfg.nodes) == 5
     assert len(cfg.post_processing) >= 1
     assert cfg.post_processing[0].action == "noop"
+    beta = next(n for n in cfg.nodes if n.id == "beta")
+    assert isinstance(beta, AgentWorkflowNodeModel)
+    assert beta.structured_review is True
 
 
 def test_workflow_schema_rejects_bad_version() -> None:

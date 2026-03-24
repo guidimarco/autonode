@@ -11,31 +11,16 @@ END_SENTINEL = "__end__"
 
 # ── Post-workflow actions ──────────────────────────────────────────────────────
 
-# Post-workflow actions are executed after the workflow is complete.
-# This is defined what's happening after the workflow is complete.
-
 
 @dataclass(frozen=True, slots=True)
 class PostProcessStepModel:
-    """Declarative post-workflow action (handled by post_processing runner, step 4)."""
+    """Declarative post-workflow action (handled by post_processing runner)."""
 
     action: str
     params: dict[str, Any] = field(default_factory=dict)
 
 
-@dataclass(frozen=True, slots=True)
-class VerdictFromContentModel:
-    """After agent reply, set `verdict` state from message content (case-insensitive)."""
-
-    approved_marker: str
-    approved_verdict: str
-    revision_verdict: str
-
-
 # ── Workflow nodes ─────────────────────────────────────────────────────────────
-
-# Nodes are the building blocks of the workflow: agents, tools, and state updates.
-# This is defined what's happening at each step of the workflow.
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,7 +28,7 @@ class AgentWorkflowNodeModel:
     id: str
     kind: Literal["agent"]
     agent_id: str
-    verdict: VerdictFromContentModel | None = None
+    structured_review: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,14 +48,6 @@ class StateUpdateWorkflowNodeModel:
 
 
 @dataclass(frozen=True, slots=True)
-class VcsProvisionWorkflowNodeModel:
-    """Prepare shadow worktree before coding agents run."""
-
-    id: str
-    kind: Literal["vcs_provision"]
-
-
-@dataclass(frozen=True, slots=True)
 class VcsSyncWorkflowNodeModel:
     """Commit (and optionally push) session worktree after a successful edit round."""
 
@@ -83,15 +60,11 @@ WorkflowNodeModel = (
     AgentWorkflowNodeModel
     | ToolWorkflowNodeModel
     | StateUpdateWorkflowNodeModel
-    | VcsProvisionWorkflowNodeModel
     | VcsSyncWorkflowNodeModel
 )
 
 
 # ── Workflow edges ──────────────────────────────────────────────────────────────
-
-# Edges are the connections between nodes.
-# This is defined where the workflow should go next.
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,9 +91,6 @@ RoutingRule = RoutingToolCallsOrNextModel | RoutingReviewerFinishOrLoopModel
 
 
 # ── Workflow model ──────────────────────────────────────────────────────────────
-
-# The workflow model is the complete definition of the workflow.
-# This is defined the entire workflow, including the nodes, edges, and routing.
 
 
 @dataclass(frozen=True, slots=True)

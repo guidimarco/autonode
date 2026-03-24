@@ -10,7 +10,12 @@ class AgentFactoryPort(ABC):
     """Abstract interface for creating runnable agents from config."""
 
     @abstractmethod
-    def create_agent(self, agent_id: str) -> Any:
+    def create_agent(
+        self,
+        agent_id: str,
+        *,
+        structured_output_model: type[Any] | None = None,
+    ) -> Any:
         pass
 
     @abstractmethod

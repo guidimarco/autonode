@@ -34,7 +34,7 @@ def _action_log(_state: Mapping[str, Any], params: dict[str, Any]) -> dict[str, 
 def _action_echo_state(state: Mapping[str, Any], params: dict[str, Any]) -> dict[str, Any]:
     keys = params.get("keys")
     if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
-        keys = ["verdict", "iteration", "current_node"]
+        keys = ["review_verdict", "iteration", "current_node"]
     values = {k: state.get(k) for k in keys}
     logger.info("[post_processing] echo_state %s", values)
     return {"action": "echo_state", "values": values}

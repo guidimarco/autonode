@@ -19,40 +19,61 @@ autonode/
 ├── src/autonode/
 │   ├── core/
 │   │   ├── agents/
-│   │   │   ├── models.py
-│   │   │   ├── parser.py
-│   │   │   └── ports.py
+│   │   │   ├── models.py          # AgentModel
+│   │   │   ├── parser.py          # parse_agents()
+│   │   │   └── ports.py           # AgentFactoryPort
+│   │   ├── sandbox/
+│   │   │   ├── exceptions.py      # SandboxImageNotFoundError
+│   │   │   ├── models.py          # WorkspaceBindingModel, ExecutionEnvironmentModel
+│   │   │   └── ports.py           # SandboxProviderPort
 │   │   ├── tools/
-│   │   │   └── ports.py
+│   │   │   └── ports.py           # ToolPort, ToolRegistryPort
 │   │   └── workflow/
-│   │       ├── models.py
-│   │       ├── parser.py
-│   │       └── ports.py
+│   │       ├── models.py          # WorkflowModel, WorkflowNodeModel, RoutingRule, …
+│   │       ├── parser.py          # parse_workflow() — validazione topologia (NetworkX)
+│   │       └── ports.py           # VCSProviderPort
 │   ├── application/
-│   │   ├── graph.py
-│   │   ├── graph_factory.py
-│   │   ├── post_processing.py
-│   │   └── workflow_state.py
+│   │   ├── use_cases/
+│   │   │   ├── run_workflow_uc.py # RunWorkflowUseCase
+│   │   │   └── cleanup_uc.py      # CleanupSessionsUseCase
+│   │   └── workflow/
+│   │       ├── builder.py         # build_graph() — compila StateGraph LangGraph
+│   │       ├── post_processing.py # run_post_processing()
+│   │       └── state.py           # GraphWorkflowState (`review_verdict`), make_initial_graph_state()
 │   ├── infrastructure/
 │   │   ├── config/
-│   │   │   ├── agents_schema.py
-│   │   │   ├── workflow_schema.py
-│   │   │   └── loader.py
+│   │   │   ├── agents_schema.py   # AgentsYamlSchema (Pydantic) + to_core()
+│   │   │   ├── workflow_schema.py # WorkflowYamlSchema (Pydantic) + to_core()
+│   │   │   └── loader.py          # load_workflow_config(), load_agents_config()
 │   │   ├── factory/
-│   │   │   └── crew.py
+│   │   │   ├── agent_factory.py # LangChainAgentFactory (AgentFactoryPort)
+│   │   │   └── review_verdict_schema.py # ReviewVerdictSchema (Pydantic) → ReviewVerdictModel
+│   │   ├── sandbox/
+│   │   │   └── docker_adapter.py  # DockerAdapter (SandboxProviderPort)
 │   │   ├── tools/
-│   │   │   ├── registry.py
-│   │   │   ├── path_guard.py
-│   │   │   ├── ignore_rules.py
-│   │   │   ├── repository_map.py
-│   │   │   └── codebase_search.py
-│   │   └── tracing.py
+│   │   │   ├── registry.py        # ToolRegistry (ToolRegistryPort)
+│   │   │   ├── path_guard.py      # PathGuard, resolve_under_root()
+│   │   │   ├── ignore_rules.py    # should_skip(), SKIP_DIR_NAMES
+│   │   │   ├── repository_map.py  # make_get_repository_map_tool()
+│   │   │   └── codebase_search.py # make_search_codebase_tool()
+│   │   ├── vcs/
+│   │   │   └── git_worktree_provider.py  # GitWorktreeProvider (VCSProviderPort)
+│   │   └── tracing.py             # configure_tracing(), get_run_metadata()
 │   └── presentation/
-│       ├── cli.py
-│       └── models.py
+│       ├── cli.py                 # main() — entrypoint CLI
+│       ├── cleanup/
+│       │   ├── handlers.py        # run_cleanup()
+│       │   └── models.py          # CleanupRequest (Pydantic)
+│       └── workflow/
+│           ├── handlers.py        # run_workflow()
+│           └── models.py          # WorkflowRunRequest (Pydantic)
 └── tests/
   ├── testdata/
+  │   ├── agents.yaml
+  │   └── workflow.yaml
   ├── stubs/
+  │   ├── agent_factory.py         # StubAgentFactory
+  │   └── vcs_provider.py          # StubVcsProviderForCompileTests
   └── test_*.py
 ```
 
@@ -63,7 +84,7 @@ autonode/
 | Layer            | Dipende da                                          | Non deve dipendere da                                               |
 | ---------------- | --------------------------------------------------- | ------------------------------------------------------------------- |
 | `core`           | stdlib + librerie algoritmiche (es. `networkx`)     | `pydantic`, `autonode.infrastructure`, LangChain/LangGraph concreti |
-| `application`    | `core` + LangGraph orchestration                    | adapter concreti infrastructure                                     |
+| `application`    | `core` + LangGraph orchestration + stdlib dataclass | adapter concreti infrastructure, Pydantic                           |
 | `infrastructure` | `core` + stack runtime (Pydantic, LangChain, tools) | `presentation`                                                      |
 | `presentation`   | `application` + `infrastructure`                    | -                                                                   |
 
@@ -78,6 +99,8 @@ autonode/
   - `ToolRegistryPort`
 - `core/workflow/ports.py`:
   - `VCSProviderPort`
+- `core/sandbox/ports.py`:
+  - `SandboxProviderPort`
 
 Questi contratti disaccoppiano il dominio da adapter concreti.
 
@@ -87,7 +110,7 @@ Questi contratti disaccoppiano il dominio da adapter concreti.
 
 - Core:
   - dataclass con suffisso `Model`
-  - esempio: `AgentWorkflowNodeModel`, `RoutingToolCallsOrNextModel`, `WorkflowModel`
+  - esempio: `AgentWorkflowNodeModel` (`structured_review` per reviewer strutturato), `RoutingToolCallsOrNextModel`, `WorkflowModel`
 - Infrastructure:
   - Pydantic schema con suffisso `Schema` (qui `*YamlSchema`)
   - mapping esplicito con `to_core()`
@@ -102,13 +125,16 @@ Flusso:
 
 ## Stato corrente degli entrypoint
 
-- `presentation/cli.py`: entrypoint operativo (workflow con gli stessi flag di prima; sottocomando `cleanup` per worktree sotto `.autonode/worktrees/` e container `autonode-sandbox-*`).
-- `infrastructure/vcs/workspace_cleanup.py`: pulizia worktree di sessione per età o in blocco.
+- `presentation/cli.py`: entrypoint operativo. Sottocomando `cleanup` per worktree sotto `.autonode/worktrees/` e container `autonode-sandbox-*`. Sottocomando default per eseguire un workflow.
+- `infrastructure/vcs/git_worktree_provider.py`: oltre al provisioning, espone rimozione worktree per sessione / globale, branch `autonode/session-*`, e `cleanup_orphaned_worktrees` (TTL) usato dal `cleanup --prune` della CLI.
 - API/MCP remoti: non presenti nel codice corrente.
 
 ---
 
 ## Nota su VCS
 
-Il contratto `VCSProviderPort` è obbligatorio in `compile_workflow` / `build_graph`.
+Il contratto `VCSProviderPort` è obbligatorio in `build_graph`.
 Il CLI usa `GitWorktreeProvider` in `infrastructure/vcs/git_worktree_provider.py`; nei test di compilazione si usa uno stub dedicato sotto `tests/stubs/`.
+
+Il provisioning del worktree avviene **prima** dell'invocazione del grafo (nel CLI bootstrap).
+Il nodo `vcs_provision` non è più supportato nel grafo: se presente in un YAML, la compilazione fallisce con errore esplicito.

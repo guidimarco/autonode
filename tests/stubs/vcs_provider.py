@@ -20,3 +20,15 @@ class StubVcsProviderForCompileTests(VCSProviderPort):
     def commit_and_push(self, worktree_path: str, message: str, *, push: bool = True) -> str:
         _ = (worktree_path, message, push)
         return ""
+
+    def remove_session_worktree(self, repo_path: str, session_id: str) -> None:
+        _ = (repo_path, session_id)
+
+    def remove_all_session_worktrees(self, repo_path: str) -> None:
+        _ = repo_path
+
+    def delete_session_branch(self, repo_path: str, session_id: str) -> None:
+        _ = (repo_path, session_id)
+
+    def delete_all_session_branches(self, repo_path: str) -> None:
+        _ = repo_path
