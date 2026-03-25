@@ -96,7 +96,7 @@ class GitWorktreeProvider(VCSProviderPort):
             branch_name=branch_name,
         )
 
-    def commit_and_push(self, worktree_path: str, message: str, *, push: bool = True) -> str:
+    def commit_changes(self, worktree_path: str, message: str) -> str:
         worktree = str(Path(worktree_path).resolve())
         subprocess.run(["git", "-C", worktree, "add", "-A"], check=True)
 
@@ -116,18 +116,6 @@ class GitWorktreeProvider(VCSProviderPort):
             capture_output=True,
             text=True,
         ).stdout.strip()
-
-        if push:
-            branch_name = subprocess.run(
-                ["git", "-C", worktree, "rev-parse", "--abbrev-ref", "HEAD"],
-                check=True,
-                capture_output=True,
-                text=True,
-            ).stdout.strip()
-            subprocess.run(
-                ["git", "-C", worktree, "push", "-u", "origin", branch_name],
-                check=True,
-            )
 
         return commit_hash
 

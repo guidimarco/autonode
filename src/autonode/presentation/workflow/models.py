@@ -35,10 +35,6 @@ class WorkflowRunRequest(BaseModel):
         default=None,
         description="Stable id for worktree/session; generated if omitted.",
     )
-    no_cleanup: bool = Field(
-        default=False,
-        description="Whether to cleanup the repository after the workflow run.",
-    )
 
     @field_validator("workflow_path", "agents_path", "prompt", mode="before")
     @classmethod

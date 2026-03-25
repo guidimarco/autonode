@@ -17,8 +17,8 @@ class StubVcsProviderForCompileTests(VCSProviderPort):
             "StubVcsProviderForCompileTests: provisioning solo con GitWorktreeProvider (CLI)."
         )
 
-    def commit_and_push(self, worktree_path: str, message: str, *, push: bool = True) -> str:
-        _ = (worktree_path, message, push)
+    def commit_changes(self, worktree_path: str, message: str) -> str:
+        _ = (worktree_path, message)
         return ""
 
     def remove_session_worktree(self, repo_path: str, session_id: str) -> None:

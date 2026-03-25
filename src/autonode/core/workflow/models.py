@@ -49,7 +49,7 @@ class StateUpdateWorkflowNodeModel:
 
 @dataclass(frozen=True, slots=True)
 class VcsSyncWorkflowNodeModel:
-    """Commit (and optionally push) session worktree after a successful edit round."""
+    """Commit locale del worktree di sessione dopo un round di editing."""
 
     id: str
     kind: Literal["vcs_sync"]

@@ -239,7 +239,7 @@ def _make_vcs_sync_fn(
         sid = raw_sid if isinstance(raw_sid, str) else str(raw_sid)
         msg = node.commit_message.replace("{session_id}", sid)
         worktree = str(state.get("worktree_path", "") or "")
-        commit_hash = vcs.commit_and_push(worktree, msg, push=True)
+        commit_hash = vcs.commit_changes(worktree, msg)
         return {"last_commit_hash": commit_hash, "current_node": node_id}
 
     return sync_node

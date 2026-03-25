@@ -48,15 +48,15 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su `review_verdi
 ## Debito Tecnico e “Punti Oscuri”
 
 - **`compile_workflow` richiede sempre `vcs_provider`**: il CLI passa `GitWorktreeProvider`; in test si usa uno stub che non simula worktree reali.
-- **Coding end-to-end non dimostrato**: il tool `aider` è registrato, ma il workflow di esempio non lo usa come motore di editing + commit/push.
+- **Coding end-to-end non dimostrato**: il tool `aider` è registrato, ma il workflow di esempio non lo usa come motore di editing con commit locale end-to-end.
 - **Ingressi remoti assenti**: manca un’implementazione reale di FastAPI/MCP.
 - **Checkpoint / serializzazione stato**: `execution_env` nello stato del grafo potrebbe non essere serializzabile con checkpointer persistenti (da valutare se si introduce persistenza).
 - ~~**Verdetti euristici**~~: sostituiti da **review strutturato** (`review_verdict` nello stato) per il reviewer; fallback sicuro a non approvato se l’output LLM non valida.
-- **Testing: strumenti sì, integrazione VCS/shadow e coding no**: i test coprono tool/parsing, ma non vedo test end-to-end sul loop coding + VCS.
+- **Testing: strumenti sì, integrazione VCS/worktree e coding no**: i test coprono tool/parsing; manca un end-to-end sul loop coding + Git reale.
 
 ## Next Steps Proposti (3 priorità)
 
-1. **Rendere operativa la sandbox fisica/shadow** (worktree, branch per sessione, path enforcement e ciclo di vita setup/sync/cleanup).  
+1. **Rendere operativa la sandbox fisica** (worktree, branch per sessione, path enforcement e ciclo di vita setup/commit locale/cleanup container+worktree).  
    Riferimento: `_meta/todos.yaml` → `ambiente di sandbox per l'esecuzione`.
 2. **Aggiungere memoria a breve/lungo termine e una base RAG** (persistenza per session/thread + retrieval controllato dalla sandbox).  
    Riferimento: `_meta/todos.yaml` → nuovo todo “memoria a breve/lungo termine + RAG”.

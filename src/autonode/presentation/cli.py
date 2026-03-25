@@ -56,15 +56,13 @@ def _run_workflow_cli(args_list: list[str]) -> None:
         default=".",
         help="Root del repository Git (directory che contiene .git); usato per worktree e sandbox",
     )
-    parser.add_argument(
-        "--no-cleanup",
-        action="store_true",
-        help="Non rimuovere il container sandbox a fine run (debug)",
-    )
 
     try:
         run_workflow_response = run_workflow(parser.parse_args(args_list).__dict__)
-        logger.info("Workflow run completed: %s", run_workflow_response)
+        logger.info(
+            "> Sandbox pulita. Modifiche conservate nel branch: %s",
+            run_workflow_response.branch_name,
+        )
     except ValidationError as e:
         logger.error("Validation error: %s", e)
         sys.exit(1)

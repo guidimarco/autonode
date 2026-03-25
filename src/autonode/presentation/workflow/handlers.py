@@ -26,7 +26,6 @@ def run_workflow(raw_input: dict[str, Any]) -> RunWorkflowUseCaseResponse:
         workflow_path=validated.workflow_path,
         agents_path=validated.agents_path,
         repo_path=validated.repo_path,
-        no_cleanup=validated.no_cleanup,
     )
 
     vcs = GitWorktreeProvider()

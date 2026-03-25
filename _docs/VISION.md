@@ -58,27 +58,23 @@ Il runtime multi-agente è **centralizzato** e raggiungibile da più canali, con
 
 ---
 
-## 6. Sandbox, strategia di sicurezza (Shadow Strategy) e gestione versione
+## 6. Sandbox, strategia locale (worktree + Docker) e gestione versione
 
-- **Obiettivo:** Isolare ogni sessione di lavoro per sicurezza, audit e ripristino, senza modificare direttamente il branch principale dell’utente.
+- **Obiettivo:** Isolare ogni sessione di lavoro per sicurezza, audit e ripristino, senza modificare direttamente il branch principale dell’utente, **senza dipendere da remote Git** (`git push`, tracking remoto obbligatorio, ecc.).
 
-### Shadow Strategy (obbligatoria per sessione)
+### Strategia locale per sessione
 
-- Per ogni sessione (`session_id` / `thread_id`) il sistema deve usare un **Git Worktree** dedicato: working tree separato dal repository principale, così agenti e tool di editing operano su una copia isolata.
-- I commit **non** avvengono sul branch di default (es. `main`/`master`): si lavora su **branch effimeri** con naming stabile, es. `autonode/session-<id>`, creati e aggiornati tramite il port `VCSProviderPort` (vedi architettura).
+- Per ogni sessione (`session_id` / `thread_id`) il runtime usa un **Git worktree** dedicato sotto `.autonode/worktrees/<session_id>`: gli agenti e i tool di editing operano solo lì.
+- I commit **non** avvengono sul branch di default (es. `main`/`master`): il lavoro avviene su un **branch di sessione** locale con naming stabile, es. `autonode/session-<token>`, creato tramite `VCSProviderPort` (`GitWorktreeProvider` in infrastructure).
+- I nodi `vcs_sync` del grafo eseguono **solo commit locali** nel worktree (nessun push verso `origin` o altri remote).
+- A **fine run** (successo o errore), il **container Docker** della sessione viene rimosso e la **directory del worktree** viene eliminata con `git worktree remove --force` (eventuale fallback filesystem); il **branch locale di sessione resta nel repository principale** così le modifiche restano consultabili e mergeabili a mano.
 
-### Gestione versione e osservabilità remota
+### Implementazione Git
 
-| Approccio | Pro | Contro |
-| --------- | --- | ------ |
-| **GitPython** (adapter in infrastructure) | API tipizzata, meno shell injection, testabile, integrabile con logica applicativa (commit message, branch, worktree). | Dipendenza aggiuntiva; edge case Git da gestire esplicitamente. |
-| **Comandi `git` via shell** | Flessibile, scriptabile ovunque. | Più fragile (quoting, error handling), più difficile da testare in modo deterministico. |
-
-- Il sistema utilizza **GitPython** per: creare worktree e branch di sessione, registrare **commit automatici** dopo round di editing riusciti, ed eseguire **push** del branch di sessione verso il remoto quando configurato — utile per **monitoraggio remoto** (es. notifiche o riassunti su **Telegram** tramite n8n dopo `git push`).
-- **Python virtualenv** (o equivalente) resta consigliato per task/tool per dipendenze isolate.
-- **Soluzione futura:** Container Docker o Podman per isolamento totale (filesystem, processi, rete), integrabile con tool wrapper LangChain.
-- **Motivazione:** Test sicuri su repository locali, tracciamento delle modifiche per sessione, possibilità di rollback lato adapter senza contaminare il branch principale.
-- **Alternative:** Firecracker o Kata Containers (microVM) → overkill per test locali, più adatti a setup industriali.
+- L’adapter infrastructure usa **comandi `git` via subprocess** (non GitPython nel codice attuale): worktree add/remove, commit, branch di sessione.
+- **Python virtualenv** (o equivalente) resta consigliato per task/tool con dipendenze isolate.
+- **Sandbox di esecuzione:** container Docker per processi e tool (es. Aider) con volume sul worktree; teardown deterministico nel use case di run.
+- **Alternative pesanti:** Firecracker o Kata Containers (microVM) → overkill per uso locale tipico.
 
 ---
 
@@ -106,7 +102,7 @@ Il runtime multi-agente è **centralizzato** e raggiungibile da più canali, con
 - **LangGraph:** orchestrazione flussi complessi e debug migliore.
 - **LlamaIndex:** futura integrazione RAG avanzata.
 - **Ingressi enterprise:** n8n e Telegram come canali primari verso FastAPI; stesso grafo e checkpoint degli altri entrypoint.
-- **Shadow Strategy + GitPython:** worktree e branch effimeri per sessione; commit/push per visibilità e integrazione con automazioni remote.
+- **Worktree + branch di sessione (solo locale):** isolamento per run; commit locali; nessun push automatico; branch conservato dopo la pulizia del worktree.
 - **Aider:** editing codice principale nel grafo, dietro port e infrastructure.
 - **Sandbox:** sicurezza e testing isolato, modulare; obbligo operativo per tool di scrittura/esecuzione (worktree/directory controllata).
 - **Agnosticismo core:** flessibilità futura per cambiare framework o provider VCS senza riscrivere logica core; hub MCP + API sulla stessa orchestrazione e stessa memoria di task dove richiesto.

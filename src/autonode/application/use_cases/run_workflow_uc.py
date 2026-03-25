@@ -15,12 +15,11 @@ from autonode.infrastructure.config.loader import load_workflow_config
 
 @dataclass(frozen=True, slots=True)
 class RunWorkflowUseCaseRequest:
-    thread_id: str
     prompt: str
     workflow_path: str
     agents_path: str
     repo_path: str
-    no_cleanup: bool = False
+    thread_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +27,7 @@ class RunWorkflowUseCaseResponse:
     """Completed workflow: ``verdict`` is ``approved`` or ``revision`` (from ``review_verdict``)."""
 
     session_id: str
+    branch_name: str
     verdict: str
     review_verdict: ReviewVerdictModel
     iteration: int
@@ -50,11 +50,11 @@ class RunWorkflowUseCase:
         self.agent_factory_provider = agent_factory_provider
 
     def execute(self, request: RunWorkflowUseCaseRequest) -> RunWorkflowUseCaseResponse:
-
-        workspace = self.vcs.setup_session_worktree(request.thread_id, request.repo_path)
-        execution_env = self.sandbox.provision_environment(workspace)
-
+        workspace = None
+        execution_env = None
         try:
+            workspace = self.vcs.setup_session_worktree(request.thread_id, request.repo_path)
+            execution_env = self.sandbox.provision_environment(workspace)
             registry = self.tool_registry_factory(execution_env)
             factory = self.agent_factory_provider(request.agents_path, registry)
 
@@ -77,6 +77,7 @@ class RunWorkflowUseCase:
             verdict_label = "approved" if rv.is_approved else "revision"
             return RunWorkflowUseCaseResponse(
                 session_id=workspace.session_id,
+                branch_name=workspace.branch_name,
                 verdict=verdict_label,
                 review_verdict=rv,
                 iteration=final_state["iteration"],
@@ -84,5 +85,7 @@ class RunWorkflowUseCase:
                 last_commit_hash=final_state.get("last_commit_hash", ""),
             )
         finally:
-            if not request.no_cleanup:
+            if execution_env is not None:
                 self.sandbox.release_environment(execution_env)
+            if workspace is not None:
+                self.vcs.remove_session_worktree(request.repo_path, workspace.session_id)

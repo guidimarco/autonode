@@ -126,7 +126,8 @@ Flusso:
 ## Stato corrente degli entrypoint
 
 - `presentation/cli.py`: entrypoint operativo. Sottocomando `cleanup` per worktree sotto `.autonode/worktrees/` e container `autonode-sandbox-*`. Sottocomando default per eseguire un workflow.
-- `infrastructure/vcs/git_worktree_provider.py`: oltre al provisioning, espone rimozione worktree per sessione / globale, branch `autonode/session-*`, e `cleanup_orphaned_worktrees` (TTL) usato dal `cleanup --prune` della CLI.
+- Dopo ogni run workflow, `RunWorkflowUseCase` rimuove in `finally` il container sandbox e il worktree di sessione; il **branch locale** `autonode/session-*` resta nel repo (nessun `git push` nel flusso standard).
+- `infrastructure/vcs/git_worktree_provider.py`: provisioning worktree, commit locale (`commit_changes`), rimozione worktree per sessione / globale, branch `autonode/session-*`, e `cleanup_orphaned_worktrees` (TTL) usato dal `cleanup --prune` della CLI.
 - API/MCP remoti: non presenti nel codice corrente.
 
 ---
@@ -138,3 +139,4 @@ Il CLI usa `GitWorktreeProvider` in `infrastructure/vcs/git_worktree_provider.py
 
 Il provisioning del worktree avviene **prima** dell'invocazione del grafo (nel CLI bootstrap).
 Il nodo `vcs_provision` non è più supportato nel grafo: se presente in un YAML, la compilazione fallisce con errore esplicito.
+I nodi `vcs_sync` effettuano **commit locali** nel worktree tramite `VCSProviderPort.commit_changes` (nessun push verso remote).
