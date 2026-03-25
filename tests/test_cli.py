@@ -56,6 +56,16 @@ def test_main_routes_cleanup_to_cleanup_cli() -> None:
     mock_cleanup.assert_called_once()
 
 
+def test_main_routes_mcp_to_mcp_cli() -> None:
+    """Verifica che `main()` chiami il ramo MCP quando il primo arg è 'mcp'."""
+    with patch("autonode.presentation.cli._run_mcp_cli") as mock_mcp:
+        with patch.object(sys, "argv", ["autonode", "mcp"]):
+            from autonode.presentation.cli import main
+
+            main()
+    mock_mcp.assert_called_once_with([])
+
+
 def test_main_routes_workflow_with_full_argv() -> None:
     """Verifica che `main()` passi sys.argv[1:] (non [2:]) al workflow handler."""
     captured_args: list[list[str]] = []

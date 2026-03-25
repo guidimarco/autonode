@@ -14,6 +14,7 @@ from pathlib import Path
 from langchain_community.agent_toolkits import FileManagementToolkit
 from langchain_core.tools import BaseTool, tool
 
+from autonode.core.logging import LoggerFactory
 from autonode.core.sandbox.models import ExecutionEnvironmentModel
 from autonode.core.tools.ports import ToolRegistryPort
 from autonode.infrastructure.tools.codebase_search import make_search_codebase_tool
@@ -55,6 +56,41 @@ def _docker_exec(
     )
 
 
+def _log_stream_lines(prefix: str, content: str) -> None:
+    logger = LoggerFactory.get_logger()
+    for line in content.splitlines():
+        logger.info("%s%s", prefix, line)
+
+
+def _compose_output_and_mirror(
+    *,
+    stdout: str,
+    stderr: str,
+    prefix: str,
+) -> str:
+    """
+    In an MCP (Model Context Protocol) architecture, 'stdout' (FD 1) is reserved
+    exclusively for JSON-RPC communication between the server and the client.
+    Any raw text printed to stdout would corrupt the protocol and crash the session.
+
+    This function implements a 'Double Stream' strategy:
+    1. FUNCTIONAL FLOW (to Agent): Both stdout and stderr from the subprocess
+       are bundled into a single string and returned to the LLM so it can
+       understand the outcome of its action.
+    2. DIAGNOSTIC FLOW (to Human): The same content is mirrored to 'stderr' (FD 2)
+       via the LoggerFactory. Since MCP clients (like Claude or the Inspector)
+       ignore stderr for protocol data but display it in their logs, this allows
+       real-time human monitoring without breaking the machine-to-machine link.
+    """
+    if stdout:
+        _log_stream_lines(prefix, stdout)
+    output = stdout
+    if stderr:
+        _log_stream_lines(f"{prefix}[stderr] ", stderr)
+        output += f"\n[stderr]\n{stderr}"
+    return output or "(nessun output)"
+
+
 def _make_container_shell_tool(
     environment: ExecutionEnvironmentModel,
     path_guard: PathGuard,
@@ -71,13 +107,16 @@ def _make_container_shell_tool(
 
         try:
             result = _docker_exec(environment, ["sh", "-lc", command], timeout=60)
-            output = result.stdout
-            if result.stderr:
-                output += f"\n[stderr]\n{result.stderr}"
-            return output or "(nessun output)"
+            return _compose_output_and_mirror(
+                stdout=result.stdout,
+                stderr=result.stderr,
+                prefix="[DOCKER_EXEC] > ",
+            )
         except subprocess.TimeoutExpired:
+            LoggerFactory.get_logger().warning("[DOCKER_EXEC] > timeout (60s) superato.")
             return "ERRORE: timeout (60s) superato."
         except Exception as e:
+            LoggerFactory.get_logger().exception("[DOCKER_EXEC] > errore subprocess shell: %s", e)
             return f"ERRORE: {e}"
 
     return shell
@@ -125,11 +164,13 @@ def _make_container_aider_tool(
             if api_key:
                 env_vars["OPEN_ROUTER_API_KEY"] = api_key
             result = _docker_exec(environment, command, env_vars=env_vars)
-            output = result.stdout
-            if result.stderr:
-                output += f"\n[stderr]\n{result.stderr}"
-            return output or "(nessun output)"
+            return _compose_output_and_mirror(
+                stdout=result.stdout,
+                stderr=result.stderr,
+                prefix="[AIDER] > ",
+            )
         except Exception as e:
+            LoggerFactory.get_logger().exception("[AIDER] > errore subprocess aider: %s", e)
             return f"Aider: {e}"
 
     return aider

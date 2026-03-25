@@ -1,0 +1,69 @@
+# =============================================================================
+# ESEMPIO / Master template — NON è la config operativa di default.
+# Copia o adatta in workflow.yaml; richiede agenti coerenti in agents.yaml.
+# =============================================================================
+# Riferimento: build_graph (builder.py), modelli in core/workflow/models.py.
+# kind routing reviewer in YAML: reviewer_finish_or_tools_or_revision
+# (non confondere con nomi “verbali” tipo reviewer_finish_or_loop).
+# =============================================================================
+
+version: 1
+entry: developer
+max_iterations: 10
+
+nodes:
+  # agent: invoca create_agent(agent_id). structured_review → ReviewVerdictModel.
+  - id: developer
+    kind: agent
+    agent_id: developer
+    structured_review: false
+
+  # tool_node: tool da registry; tools_agent_id unisce i tool dell’agente indicato.
+  - id: dev_tools
+    kind: tool_node
+    tools_agent_id: developer
+
+  # vcs_sync: commit nel worktree; {session_id} nel messaggio viene sostituito.
+  - id: sync_worktree
+    kind: vcs_sync
+    commit_message: "autonode: sync session {session_id}"
+
+  - id: reviewer
+    kind: agent
+    agent_id: code_reviewer
+    structured_review: true
+
+  - id: reviewer_tools
+    kind: tool_node
+    tools_agent_id: code_reviewer
+
+  # state_update: increment_iteration conta i giri di revisione; clear_verdict
+  # azzera il verdetto prima di tornare all’implementatore.
+  - id: bump_iteration
+    kind: state_update
+    increment_iteration: true
+    clear_verdict: true
+
+edges:
+  - from_node: dev_tools
+    to: developer
+  - from_node: sync_worktree
+    to: reviewer
+  - from_node: reviewer_tools
+    to: reviewer
+  - from_node: bump_iteration
+    to: developer
+
+routing:
+  # tool_calls_or_next: ultimo AIMessage con tool_calls → tools_node, altrimenti next.
+  developer:
+    kind: tool_calls_or_next
+    tools_node: dev_tools
+    next: sync_worktree
+
+  # reviewer_finish_or_tools_or_revision: tool_calls → tools_node; approvato o
+  # iteration >= max_iterations → END; altrimenti revision_node.
+  reviewer:
+    kind: reviewer_finish_or_tools_or_revision
+    tools_node: reviewer_tools
+    revision_node: bump_iteration

@@ -9,10 +9,12 @@ __pycache__/
 .vscode/
 .cursor/
 _meta/
+config/
 
 # App Runtime
 .venv/
 playground/
+.aider*
 
 # Security
 .env

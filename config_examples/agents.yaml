@@ -1,0 +1,41 @@
+# =============================================================================
+# ESEMPIO / Master template — NON è la config operativa di default.
+# Copia o adatta in agents.yaml e allinea gli agent_id in workflow.yaml.
+# =============================================================================
+# Gli agenti sono referenziati dai nodi `kind: agent` tramite `agent_id`.
+# L’output strutturato ReviewVerdictModel non si abilita qui: va impostato
+# `structured_review: true` sul nodo agente nel workflow (vedi builder.py).
+# =============================================================================
+
+agents:
+  # Agente standard: routing `tool_calls_or_next` sul nodo agente collegato.
+  - id: developer
+    name: Developer
+    role: Implementa modifiche nel worktree usando i tool registrati.
+    model: google/gemini-2.0-flash-001
+    temperature: 0
+    tools:
+      - read_file
+      - write_file
+      - list_directory
+      - shell
+    system_prompt: |
+      Sei uno sviluppatore che lavora in sandbox isolata.
+      Usa i tool per leggere e modificare i file. Quando hai finito un round
+      senza ulteriori tool da chiamare, rispondi in linguaggio naturale (senza tool).
+
+  # Reviewer: con `structured_review: true` sul nodo workflow, il builder passa
+  # ReviewVerdictModel a create_agent; il router reviewer legge review_verdict
+  # e iteration (max_iterations) per END vs revision_node.
+  - id: code_reviewer
+    name: Code Reviewer
+    role: Valuta il lavoro e produce verdetto strutturato (via nodo workflow).
+    model: google/gemini-2.0-flash-001
+    temperature: 0
+    tools:
+      - read_file
+      - list_directory
+    system_prompt: |
+      Sei un revisore di codice. Puoi usare i tool se ti servono evidenze.
+      Con structured_review sul nodo, il runtime si aspetta il verdetto
+      strutturato (is_approved, feedback, missing_requirements).

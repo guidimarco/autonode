@@ -28,7 +28,7 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su `review_verdi
   - Factory agenti ci sono;
   - VCS: `GitWorktreeProvider` + cleanup worktree; usato dal CLI insieme a `DockerAdapter`.
   - Sandbox Docker: immagine `autonode-sandbox:latest` costruita da `docker/sandbox.Dockerfile` con contesto `.` (cwd = root repo); `DockerAdapter` inietta nel container le API key note (`OPENAI_*`, `ANTHROPIC_*`, `OPEN_ROUTER_*`) per Aider/provider.
-- **`presentation/`**: entrypoint CLI operativo.
+- **`presentation/`**: entrypoint CLI operativo; server MCP stdio (`autonode mcp`) in `presentation/mcp/`.
   - `cli.py` esegue il **bootstrap** (Git worktree + container Docker) **prima** di `graph.invoke()`; il grafo non avvia mai tool senza `execution_env` valido nello stato.
 
 ## Feature Implementate
@@ -49,7 +49,7 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su `review_verdi
 
 - **`compile_workflow` richiede sempre `vcs_provider`**: il CLI passa `GitWorktreeProvider`; in test si usa uno stub che non simula worktree reali.
 - **Coding end-to-end non dimostrato**: il tool `aider` è registrato, ma il workflow di esempio non lo usa come motore di editing con commit locale end-to-end.
-- **Ingressi remoti assenti**: manca un’implementazione reale di FastAPI/MCP.
+- **Ingressi remoti parziali**: MCP stdio in `presentation/mcp/` con tool `run_workflow` collegato al use case reale; manca FastAPI e altri ingressi HTTP.
 - **Checkpoint / serializzazione stato**: `execution_env` nello stato del grafo potrebbe non essere serializzabile con checkpointer persistenti (da valutare se si introduce persistenza).
 - ~~**Verdetti euristici**~~: sostituiti da **review strutturato** (`review_verdict` nello stato) per il reviewer; fallback sicuro a non approvato se l’output LLM non valida.
 - **Testing: strumenti sì, integrazione VCS/worktree e coding no**: i test coprono tool/parsing; manca un end-to-end sul loop coding + Git reale.

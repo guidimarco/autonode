@@ -13,9 +13,9 @@ Le integrazioni concrete stanno in `infrastructure/`.
 
 ```text
 autonode/
-├── config/
-│   ├── agents.yaml
-│   └── workflow.yaml
+├── config_examples/              # Templates
+│   ├── agents.example.yaml
+│   └── workflow.example.yaml
 ├── src/autonode/
 │   ├── core/
 │   │   ├── agents/
@@ -26,6 +26,7 @@ autonode/
 │   │   │   ├── exceptions.py      # SandboxImageNotFoundError
 │   │   │   ├── models.py          # WorkspaceBindingModel, ExecutionEnvironmentModel
 │   │   │   └── ports.py           # SandboxProviderPort
+│   │   ├── logging.py             # AutonodeLogger + LoggerFactory (contract + registry)
 │   │   ├── tools/
 │   │   │   └── ports.py           # ToolPort, ToolRegistryPort
 │   │   └── workflow/
@@ -45,6 +46,8 @@ autonode/
 │   │   │   ├── agents_schema.py   # AgentsYamlSchema (Pydantic) + to_core()
 │   │   │   ├── workflow_schema.py # WorkflowYamlSchema (Pydantic) + to_core()
 │   │   │   └── loader.py          # load_workflow_config(), load_agents_config()
+│   │   ├── logging/
+│   │   │   └── stderr_adapter.py  # StandardErrorAutonodeLogger su sys.stderr
 │   │   ├── factory/
 │   │   │   ├── agent_factory.py # LangChainAgentFactory (AgentFactoryPort)
 │   │   │   └── review_verdict_schema.py # ReviewVerdictSchema (Pydantic) → ReviewVerdictModel
@@ -64,6 +67,10 @@ autonode/
 │       ├── cleanup/
 │       │   ├── handlers.py        # run_cleanup()
 │       │   └── models.py          # CleanupRequest (Pydantic)
+│       ├── mcp/
+│       │   ├── server.py          # FastMCP stdio + tool ``run_workflow`` → handler workflow
+│       │   ├── models.py          # mapping risposta MCP (success/error)
+│       │   └── stdio_safe.py      # logging su stderr + isolamento fd stdout durante run
 │       └── workflow/
 │           ├── handlers.py        # run_workflow()
 │           └── models.py          # WorkflowRunRequest (Pydantic)
@@ -104,6 +111,23 @@ autonode/
 
 Questi contratti disaccoppiano il dominio da adapter concreti.
 
+Per il logging, il core espone `AutonodeLogger` e `LoggerFactory`:
+
+- i layer interni dipendono solo da questa astrazione;
+- `install_autonode_process_logging()` in `infrastructure/logging/stderr_adapter.py` configura il root logger su `sys.stderr` e chiama `LoggerFactory.set_logger(create_stderr_autonode_logger())`;
+- all'avvio, `presentation/cli.py` e `presentation/mcp/stdio_safe.py` (via `run_mcp_server`) invocano tale bootstrap.
+
+### Double stream logging (MCP e mirroring su stderr)
+
+Su trasporto **stdio**, stdout è riservato al protocollo JSON-RPC MCP: qualsiasi byte su fd 1 corromperebbe il canale.
+
+Il sistema combina due meccanismi:
+
+1. **Logging applicativo su stderr** — il bootstrap (`install_autonode_process_logging`) invia i record del logging Python su `sys.stderr`, così log e protocollo restano separati.
+2. **Mirroring temporaneo di fd 1 su stderr** — durante l’esecuzione del tool `run_workflow`, il context manager `isolate_process_stdout_to_stderr()` in `presentation/mcp/stdio_safe.py` esegue `dup2` così che anche codice nativo o sottoprocessi che scrivono su stdout (fd 1) finiscano sullo stesso sink di stderr; alla fine del tool il fd 1 viene ripristinato per consentire al runtime MCP di rispondere al client.
+
+In sintesi: **double stream** = canale protocollo intatto su stdout tra le invocazioni, **tutto il rumore diagnostico e le scritture “sbagliate” su stdout durante il tool** deviati verso stderr.
+
 ---
 
 ## Modelli e validazione
@@ -125,10 +149,10 @@ Flusso:
 
 ## Stato corrente degli entrypoint
 
-- `presentation/cli.py`: entrypoint operativo. Sottocomando `cleanup` per worktree sotto `.autonode/worktrees/` e container `autonode-sandbox-*`. Sottocomando default per eseguire un workflow.
+- `presentation/cli.py`: entrypoint operativo. Sottocomando `cleanup` per worktree sotto `.autonode/worktrees/` e container `autonode-sandbox-*`. Sottocomando `mcp` per avviare il server MCP su stdio. Sottocomando default per eseguire un workflow.
 - Dopo ogni run workflow, `RunWorkflowUseCase` rimuove in `finally` il container sandbox e il worktree di sessione; il **branch locale** `autonode/session-*` resta nel repo (nessun `git push` nel flusso standard).
 - `infrastructure/vcs/git_worktree_provider.py`: provisioning worktree, commit locale (`commit_changes`), rimozione worktree per sessione / globale, branch `autonode/session-*`, e `cleanup_orphaned_worktrees` (TTL) usato dal `cleanup --prune` della CLI.
-- API/MCP remoti: non presenti nel codice corrente.
+- MCP (stdio): presente in `presentation/mcp/`; tool `run_workflow` invoca `presentation/workflow/handlers.run_workflow` con logging su stderr e isolamento temporaneo di fd stdout durante l’esecuzione. Path YAML di default: `config/workflow.yaml` e `config/agents.yaml` relativi alla root del repository (risolti da `Path(__file__)` in `server.py`). API HTTP remote: non presenti nel codice corrente.
 
 ---
 
