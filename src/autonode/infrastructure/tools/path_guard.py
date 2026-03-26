@@ -64,7 +64,33 @@ class PathGuard:
     def validate_shell_command(self, command: str) -> None:
         tokens = shlex.split(command)
         for token in tokens:
-            if ".." in token:
+            # Fast reject for classic traversal tokens.
+            if token == ".." or token.startswith("../") or "/../" in token:
                 raise ValueError("path traversal ('..') non permesso nella sandbox.")
+
+            # Absolute paths must stay inside container workspace.
             if token.startswith("/") and not token.startswith(self._container_root):
                 raise ValueError(f"path assoluto non permesso: {token}")
+
+            """
+            Validate symlink escape attempts by resolving paths that target the
+            container workspace (mounted from host worktree_host_path).
+            
+            resolve_relative_path() uses .resolve() and relative_to(), which blocks
+            escaping via symlinks.
+            """
+            if any(ch in token for ch in ("*", "?", "[", "]")):
+                continue
+            if token.startswith("-"):
+                continue
+            if token.startswith(self._container_root):
+                rel = token[len(self._container_root) :].lstrip("/") or "."
+                self.resolve_relative_path(rel)
+                continue
+
+            # Relative paths execute with cwd set to container_workspace_path (-w).
+            # Treat them as relative to container_root to enforce the boundary.
+            rel = token[2:] if token.startswith("./") else token
+            if rel == "":
+                rel = "."
+            self.resolve_relative_path(rel)

@@ -9,12 +9,15 @@ import re
 import shutil
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
 from autonode.core.sandbox.models import WorkspaceBindingModel
 from autonode.core.workflow.ports import VCSProviderPort
 
 logger = logging.getLogger(__name__)
+
+_SESSION_ID_MARKER_FILENAME = ".autonode_session_id"
 
 
 def _branch_label_for_session(session_id: str) -> str:
@@ -59,6 +62,7 @@ class GitWorktreeProvider(VCSProviderPort):
     def setup_session_worktree(self, session_id: str, repo_path: str) -> WorkspaceBindingModel:
         repo = Path(repo_path).resolve()
         branch_name = _branch_label_for_session(session_id)
+        internal_worktree_id = str(uuid.uuid4())
 
         if not (repo / ".git").exists():
             msg = (
@@ -69,7 +73,7 @@ class GitWorktreeProvider(VCSProviderPort):
 
         worktree_root = self._resolved_worktrees_root(repo)
         worktree_root.mkdir(parents=True, exist_ok=True)
-        worktree = (worktree_root / session_id).resolve()
+        worktree = (worktree_root / internal_worktree_id).resolve()
 
         if worktree.exists():
             shutil.rmtree(worktree)
@@ -88,6 +92,9 @@ class GitWorktreeProvider(VCSProviderPort):
             ],
             check=True,
         )
+
+        marker_path = worktree / _SESSION_ID_MARKER_FILENAME
+        marker_path.write_text(session_id, encoding="utf-8")
 
         return WorkspaceBindingModel(
             session_id=session_id,
@@ -121,18 +128,33 @@ class GitWorktreeProvider(VCSProviderPort):
 
     def remove_session_worktree(self, repo_path: str, session_id: str) -> None:
         repo = Path(repo_path).resolve()
-        worktree_dir = (self._resolved_worktrees_root(repo) / session_id).resolve()
-        if not worktree_dir.exists():
-            logger.info(
-                "Nessun worktree da rimuovere per sessione %s (%s)",
-                session_id,
-                worktree_dir,
-            )
+        root = self._resolved_worktrees_root(repo)
+        if not root.exists():
+            logger.info("No worktrees root dir found for session %s (%s)", session_id, root)
             self._git_worktree_prune(repo)
             return
-        self._git_worktree_remove(repo, worktree_dir)
+
+        target_dirs: list[Path] = []
+        for child in sorted(root.iterdir()):
+            if not child.is_dir():
+                continue
+            marker_path = child / _SESSION_ID_MARKER_FILENAME
+            try:
+                content = marker_path.read_text(encoding="utf-8").strip()
+            except OSError:
+                continue
+            if content == session_id:
+                target_dirs.append(child.resolve())
+
+        if not target_dirs:
+            logger.info("No worktree found for session %s under %s", session_id, root)
+            self._git_worktree_prune(repo)
+            return
+
+        for worktree_dir in target_dirs:
+            self._git_worktree_remove(repo, worktree_dir)
+            logger.info("Worktree sessione %s rimosso: %s", session_id, worktree_dir)
         self._git_worktree_prune(repo)
-        logger.info("Worktree sessione %s rimosso: %s", session_id, worktree_dir)
 
     def remove_all_session_worktrees(self, repo_path: str) -> None:
         repo = Path(repo_path).resolve()

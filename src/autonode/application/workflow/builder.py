@@ -10,7 +10,7 @@ import logging
 from typing import Any, cast
 
 from langchain_core.messages import AIMessage, BaseMessage
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
 
@@ -63,18 +63,15 @@ def build_graph(
     workflow: WorkflowModel,
     factory: AgentFactoryPort,
     registry: ToolRegistryPort,
-    checkpointer: Any = None,
+    checkpointer: BaseCheckpointSaver[Any],
     *,
     vcs_provider: VCSProviderPort,
 ) -> Any:
     """
     Assemble and compile a StateGraph from workflow configuration.
 
-    Checkpointer: pass None for default MemorySaver; use SqliteSaver/Postgres for persistence.
+    Checkpointer: pass a configured checkpointer from the application layer.
     """
-    if checkpointer is None:
-        checkpointer = MemorySaver()
-
     vcs: VCSProviderPort = vcs_provider
 
     nodes = workflow.nodes

@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import ValidationError
 
 from autonode.application.workflow.builder import build_graph
@@ -50,7 +51,7 @@ def test_compile_workflow_from_testdata(
         workflow_config,
         stub_agent_factory,
         registry,
-        checkpointer=None,
+        checkpointer=InMemorySaver(),
         vcs_provider=_vcs_for_compile(),
     )
     assert graph is not None

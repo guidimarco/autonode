@@ -77,7 +77,9 @@ def test_execute_releases_container_then_removes_worktree(
             "autonode.application.use_cases.run_workflow_uc.build_graph",
             return_value=graph,
         ):
-            uc = RunWorkflowUseCase(vcs, sandbox, registry_factory, agent_factory_provider)
+            uc = RunWorkflowUseCase(
+                vcs, sandbox, registry_factory, agent_factory_provider, checkpointer=MagicMock()
+            )
             req = RunWorkflowUseCaseRequest(
                 prompt="hello world task",
                 workflow_path="/w.yaml",
@@ -121,7 +123,9 @@ def test_execute_cleanup_after_graph_raises(
             def agent_factory_provider(path: str, registry: ToolRegistryPort) -> AgentFactoryPort:
                 return cast(AgentFactoryPort, MagicMock())
 
-            uc = RunWorkflowUseCase(vcs, sandbox, registry_factory, agent_factory_provider)
+            uc = RunWorkflowUseCase(
+                vcs, sandbox, registry_factory, agent_factory_provider, checkpointer=MagicMock()
+            )
             req = RunWorkflowUseCaseRequest(
                 prompt="hello world task",
                 workflow_path="/w.yaml",
@@ -156,7 +160,9 @@ def test_execute_removes_worktree_when_provision_fails(
             def agent_factory_provider(path: str, registry: ToolRegistryPort) -> AgentFactoryPort:
                 return cast(AgentFactoryPort, MagicMock())
 
-            uc = RunWorkflowUseCase(vcs, sandbox, registry_factory, agent_factory_provider)
+            uc = RunWorkflowUseCase(
+                vcs, sandbox, registry_factory, agent_factory_provider, checkpointer=MagicMock()
+            )
             req = RunWorkflowUseCaseRequest(
                 prompt="hello world task",
                 workflow_path="/w.yaml",

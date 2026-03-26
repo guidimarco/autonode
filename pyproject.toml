@@ -8,15 +8,18 @@ version = "0.1.0"
 dependencies = [
     "python-dotenv",
     "pyyaml>=6.0",
+    "fastapi",
     "langchain>=0.3.0",
     "langchain-openai",
     "langchain-core",
     "langchain-community",
     "langgraph>=0.2",
+    "langgraph-checkpoint-sqlite",
     "langsmith>=0.1",
     "aider-chat",
     "docker>=7.0.0",
     "mcp>=1.26.0",
+    "uvicorn",
 ]
 
 [project.optional-dependencies]

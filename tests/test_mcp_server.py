@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import patch
+import uuid
+from types import SimpleNamespace
+from typing import cast
+from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
 
+import autonode.presentation.mcp.server as server_mod
 from autonode.application.use_cases.run_workflow_uc import RunWorkflowUseCaseResponse
+from autonode.bootstrap import AppContainer
 from autonode.core.agents.models import ReviewVerdictModel
 from autonode.presentation.mcp.models import (
     RunWorkflowMcpToolResult,
@@ -16,7 +20,6 @@ from autonode.presentation.mcp.models import (
     mcp_result_from_validation_error,
     summarize_final_output,
 )
-from autonode.presentation.mcp.server import _execute_run_workflow_mcp, _raw_request_for_handler
 from autonode.presentation.workflow.models import WorkflowRunRequest
 
 
@@ -64,38 +67,6 @@ def test_mcp_result_from_validation_error() -> None:
     assert "does not exist" in result["summary"]
 
 
-def test_raw_request_empty_strings_resolve_repo_config_paths() -> None:
-    import autonode.presentation.mcp.server as server_mod
-
-    root = Path(server_mod.__file__).resolve().parents[4]
-    raw = _raw_request_for_handler(
-        prompt="do thing",
-        repo_path="/repo",
-        workflow_file="",
-        agents_file="",
-        thread_id="tid-1",
-    )
-    assert raw == {
-        "prompt": "do thing",
-        "repo_path": "/repo",
-        "thread_id": "tid-1",
-        "workflow_path": str(root / "config" / "workflow.yaml"),
-        "agents_path": str(root / "config" / "agents.yaml"),
-    }
-
-
-def test_raw_request_includes_explicit_optional_paths() -> None:
-    raw = _raw_request_for_handler(
-        prompt="p",
-        repo_path="/r",
-        workflow_file="/w.yaml",
-        agents_file="/a.yaml",
-        thread_id="tid-2",
-    )
-    assert raw["workflow_path"] == "/w.yaml"
-    assert raw["agents_path"] == "/a.yaml"
-
-
 def test_execute_run_workflow_mcp_success() -> None:
     rv = ReviewVerdictModel(is_approved=True, feedback="", missing_requirements=[])
     uc_response = RunWorkflowUseCaseResponse(
@@ -107,19 +78,24 @@ def test_execute_run_workflow_mcp_success() -> None:
         final_output="done",
         last_commit_hash="abc",
     )
+
+    server_mod._container = cast(AppContainer, SimpleNamespace(run_workflow_use_case=MagicMock()))
     with patch(
         "autonode.presentation.mcp.server.run_autonode_workflow",
         return_value=uc_response,
     ) as mock_run:
-        out = _execute_run_workflow_mcp("prompt text", "/repo", "", "")
+        out = server_mod.run_workflow(
+            prompt="prompt text", repo_path="/repo", workflow_path="", agents_path=""
+        )
+
     mock_run.assert_called_once()
-    passed = mock_run.call_args[0][0]
-    repo_root = Path(__file__).resolve().parents[1]
-    assert passed["prompt"] == "prompt text"
-    assert passed["repo_path"] == "/repo"
-    assert passed["thread_id"]
-    assert passed["workflow_path"] == str(repo_root / "config" / "workflow.yaml")
-    assert passed["agents_path"] == str(repo_root / "config" / "agents.yaml")
+    passed_raw = mock_run.call_args[0][1]
+    uuid.UUID(passed_raw["thread_id"])
+    assert passed_raw["prompt"] == "prompt text"
+    assert passed_raw["repo_path"] == "/repo"
+    assert passed_raw["workflow_path"] is None
+    assert passed_raw["agents_path"] is None
+
     assert out["status"] == "success"
     assert out["branch_name"] == "autonode/session-s1"
     assert out["summary"] == "done"
@@ -127,6 +103,7 @@ def test_execute_run_workflow_mcp_success() -> None:
 
 
 def test_execute_run_workflow_mcp_validation_error() -> None:
+    server_mod._container = cast(AppContainer, SimpleNamespace(run_workflow_use_case=MagicMock()))
     with patch(
         "autonode.presentation.mcp.server.run_autonode_workflow",
         side_effect=ValidationError.from_exception_data(
@@ -134,18 +111,25 @@ def test_execute_run_workflow_mcp_validation_error() -> None:
             [{"type": "missing", "loc": ("prompt",), "input": {}}],
         ),
     ):
-        out = _execute_run_workflow_mcp("x", "/repo", "", "")
+        out = server_mod.run_workflow(
+            prompt="x", repo_path="/repo", workflow_path="", agents_path=""
+        )
+
     assert out["status"] == "error"
     assert out["branch_name"] == ""
-    assert "prompt" in out["summary"].lower() or "field" in out["summary"].lower()
+    assert "ValidationError" in out["summary"]
 
 
 def test_execute_run_workflow_mcp_runtime_error() -> None:
+    server_mod._container = cast(AppContainer, SimpleNamespace(run_workflow_use_case=MagicMock()))
     with patch(
         "autonode.presentation.mcp.server.run_autonode_workflow",
         side_effect=RuntimeError("boom"),
     ):
-        out = _execute_run_workflow_mcp("p", "/repo", "", "")
+        out = server_mod.run_workflow(
+            prompt="p", repo_path="/repo", workflow_path="", agents_path=""
+        )
+
     assert out["status"] == "error"
     assert "RuntimeError" in out["summary"]
     assert "boom" in out["summary"]

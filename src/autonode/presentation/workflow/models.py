@@ -1,7 +1,9 @@
-import os
 from pathlib import Path
 
-from pydantic import BaseModel, Field, ValidationInfo, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[4]
+_PROJECT_CONFIG_ROOT = _PROJECT_ROOT / "config"
 
 
 class WorkflowRunRequest(BaseModel):
@@ -50,9 +52,9 @@ class WorkflowRunRequest(BaseModel):
 
     @field_validator("workflow_path", "agents_path")
     @classmethod
-    def validate_path(cls, v: str) -> str:
-        if not os.path.exists(v):
-            raise ValueError(f"The path {v} does not exist.")
+    def _validate_path_with_config_boundary(cls, v: str) -> str:
+        # Real validation (config boundary enforcement) is done in `validate_config_paths`.
+        # This legacy validator is kept as a lightweight placeholder.
         return v
 
     @field_validator("repo_path")
@@ -64,3 +66,46 @@ class WorkflowRunRequest(BaseModel):
         if not (path / ".git").exists():
             raise ValueError(f"The path {v} is not a Git repository.")
         return v
+
+    @model_validator(mode="after")
+    def validate_config_paths(self) -> "WorkflowRunRequest":
+        """
+        Security: only allow `workflow_path` and `agents_path` YAML files under `config/`.
+
+        Allowed roots:
+        - this project's `<PROJECT_ROOT>/config`
+        - target git repo's `<repo_path>/config`
+        """
+
+        def _to_candidate(path_str: str) -> Path:
+            # Resolve relative paths against the current working directory: we validate what
+            # will actually be read by `load_*_config(path_str)` later.
+            return Path(path_str).expanduser().resolve()
+
+        allowed_roots = [
+            _PROJECT_CONFIG_ROOT,
+            Path(self.repo_path).resolve() / "config",
+        ]
+
+        for field_name in ("workflow_path", "agents_path"):
+            candidate = _to_candidate(getattr(self, field_name))
+
+            if not candidate.exists() or not candidate.is_file():
+                raise ValueError(f"Invalid {field_name}: file does not exist: {candidate}")
+
+            ok = False
+            for root in allowed_roots:
+                try:
+                    candidate.relative_to(root)
+                    ok = True
+                    break
+                except ValueError:
+                    continue
+
+            if not ok:
+                raise ValueError(
+                    f"Invalid {field_name}: only files under config/ are allowed "
+                    f"(got {candidate})."
+                )
+
+        return self

@@ -1,6 +1,9 @@
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
+
+from langgraph.checkpoint.base import BaseCheckpointSaver
 
 from autonode.application.workflow.builder import build_graph
 from autonode.application.workflow.state import make_initial_graph_state
@@ -43,11 +46,13 @@ class RunWorkflowUseCase:
         sandbox_provider: SandboxProviderPort,
         tool_registry_factory: Callable[[ExecutionEnvironmentModel], ToolRegistryPort],
         agent_factory_provider: Callable[[str, ToolRegistryPort], AgentFactoryPort],
+        checkpointer: BaseCheckpointSaver[Any],
     ):
         self.vcs = vcs_provider
         self.sandbox = sandbox_provider
         self.tool_registry_factory = tool_registry_factory
         self.agent_factory_provider = agent_factory_provider
+        self.checkpointer = checkpointer
 
     def execute(self, request: RunWorkflowUseCaseRequest) -> RunWorkflowUseCaseResponse:
         workspace = None
@@ -59,7 +64,13 @@ class RunWorkflowUseCase:
             factory = self.agent_factory_provider(request.agents_path, registry)
 
             workflow = load_workflow_config(request.workflow_path)
-            graph = build_graph(workflow, factory, registry, vcs_provider=self.vcs)
+            graph = build_graph(
+                workflow,
+                factory,
+                registry,
+                checkpointer=self.checkpointer,
+                vcs_provider=self.vcs,
+            )
 
             initial_state = make_initial_graph_state(
                 request.prompt,

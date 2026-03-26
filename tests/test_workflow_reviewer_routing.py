@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from langgraph.checkpoint.memory import InMemorySaver
+
 from autonode.application.workflow.builder import build_graph
 from autonode.application.workflow.state import make_initial_graph_state
 from autonode.core.agents.models import ReviewVerdictModel
@@ -42,7 +44,7 @@ def test_graph_invoke_reviewer_structured_approval_ends(
         workflow_config,
         factory,
         registry,
-        checkpointer=None,
+        checkpointer=InMemorySaver(),
         vcs_provider=StubVcsProviderForCompileTests(),
     )
     sandbox_root = tmp_path / "sandbox"

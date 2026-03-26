@@ -19,7 +19,7 @@ def test_workflow_cli_passes_args_to_run_workflow(tmp_path: Path) -> None:
 
     captured: dict[str, object] = {}
 
-    def fake_run_workflow(raw: dict[str, object]) -> MagicMock:
+    def fake_run_workflow(_use_case: object, raw: dict[str, object]) -> MagicMock:
         captured.update(raw)
         raise SystemExit(0)
 
@@ -39,10 +39,12 @@ def test_workflow_cli_passes_args_to_run_workflow(tmp_path: Path) -> None:
         with pytest.raises(SystemExit):
             from autonode.presentation.cli import _run_workflow_cli
 
-            _run_workflow_cli(args)
+            container = MagicMock()
+            container.run_workflow_use_case = MagicMock()
+            _run_workflow_cli(container, args)
 
-    assert captured.get("workflow") == str(wf)
-    assert captured.get("agents") == str(ag)
+    assert captured.get("workflow_path") == str(wf)
+    assert captured.get("agents_path") == str(ag)
     assert captured.get("prompt") == prompt
 
 
@@ -56,21 +58,22 @@ def test_main_routes_cleanup_to_cleanup_cli() -> None:
     mock_cleanup.assert_called_once()
 
 
-def test_main_routes_mcp_to_mcp_cli() -> None:
-    """Verifica che `main()` chiami il ramo MCP quando il primo arg è 'mcp'."""
-    with patch("autonode.presentation.cli._run_mcp_cli") as mock_mcp:
+def test_main_routes_mcp_arg_to_workflow_cli() -> None:
+    """Il CLI attuale non espone un sottocomando MCP; per default passa agli argomenti workflow."""
+    with patch("autonode.presentation.cli._run_workflow_cli") as mock_workflow:
         with patch.object(sys, "argv", ["autonode", "mcp"]):
             from autonode.presentation.cli import main
 
             main()
-    mock_mcp.assert_called_once_with([])
+    # call signature: _run_workflow_cli(container, args_list)
+    assert mock_workflow.call_args[0][1] == ["mcp"]
 
 
 def test_main_routes_workflow_with_full_argv() -> None:
     """Verifica che `main()` passi sys.argv[1:] (non [2:]) al workflow handler."""
     captured_args: list[list[str]] = []
 
-    def fake_workflow_cli(args: list[str]) -> None:
+    def fake_workflow_cli(_container: object, args: list[str]) -> None:
         captured_args.append(args)
 
     with patch("autonode.presentation.cli._run_workflow_cli", side_effect=fake_workflow_cli):

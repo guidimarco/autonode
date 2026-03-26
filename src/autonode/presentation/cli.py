@@ -11,6 +11,7 @@ import sys
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
+from autonode.bootstrap import AppContainer, bootstrap_app
 from autonode.core.logging import LoggerFactory
 from autonode.infrastructure.logging.stderr_adapter import install_autonode_process_logging
 from autonode.presentation.cleanup.handlers import run_cleanup
@@ -22,24 +23,28 @@ load_dotenv()
 def main() -> None:
     """
     CLI entry point.
+
+    Subcommands:
+      cleanup   - remove orphaned worktrees / containers
+      (default) - run the multi-agent workflow
+
+    To start the unified API+MCP server use ``presentation.server`` directly.
     """
     install_autonode_process_logging(level=logging.INFO)
 
+    container = bootstrap_app()
+
     if len(sys.argv) > 1 and sys.argv[1] == "cleanup":
-        _run_cleanup_cli(sys.argv[2:])
+        _run_cleanup_cli(container, sys.argv[2:])
         return
 
-    if len(sys.argv) > 1 and sys.argv[1] == "mcp":
-        _run_mcp_cli(sys.argv[2:])
-        return
-
-    _run_workflow_cli(sys.argv[1:])
+    _run_workflow_cli(container, sys.argv[1:])
 
 
 # ── Run workflow CLI ───────────────────────────────────────────────────────
 
 
-def _run_workflow_cli(args_list: list[str]) -> None:
+def _run_workflow_cli(container: AppContainer, args_list: list[str]) -> None:
     log = LoggerFactory.get_logger()
     parser = argparse.ArgumentParser(description="Autonode: multi-agent workflow (LangGraph)")
     parser.add_argument(
@@ -60,43 +65,29 @@ def _run_workflow_cli(args_list: list[str]) -> None:
         help="Root del repository Git (directory che contiene .git); usato per worktree e sandbox",
     )
 
+    raw = {
+        "prompt": parser.parse_args(args_list).prompt,
+        "repo_path": parser.parse_args(args_list).repo,
+        "workflow_path": parser.parse_args(args_list).workflow,
+        "agents_path": parser.parse_args(args_list).agents,
+    }
+
     try:
-        run_workflow_response = run_workflow(parser.parse_args(args_list).__dict__)
-        log.info(
-            "> Sandbox pulita. Modifiche conservate nel branch: %s",
-            run_workflow_response.branch_name,
-        )
-    except ValidationError as e:
-        log.error("Validation error: %s", e)
+        log.info("Running workflow...")
+        result = run_workflow(container.run_workflow_use_case, raw)
+        log.info("Workflow finished successfully: %s", result)
+    except ValidationError as exc:
+        log.error("Validation error: %s", exc)
         sys.exit(1)
-
-
-# ── MCP server CLI ─────────────────────────────────────────────────────────
-
-
-def _run_mcp_cli(args_list: list[str]) -> None:
-    """Start Model Context Protocol server (stdio). Extra args reserved for future use."""
-    log = LoggerFactory.get_logger()
-    if args_list:
-        log.warning("Ignoring unused MCP CLI args: %s", args_list)
-    from autonode.presentation.mcp.server import run_mcp_server
-
-    try:
-        run_mcp_server()
-    except KeyboardInterrupt:
-        import os
-
-        log.info("MCP server stopped by user")
-        os._exit(0)
-    except Exception as e:
-        log.error("Error starting MCP server: %s", e)
+    except Exception as exc:
+        log.error("Unexpected error: %s", exc)
         sys.exit(1)
 
 
 # ── Run cleanup CLI ───────────────────────────────────────────────────────
 
 
-def _run_cleanup_cli(args_list: list[str]) -> None:
+def _run_cleanup_cli(container: AppContainer, args_list: list[str]) -> None:
     log = LoggerFactory.get_logger()
     parser = argparse.ArgumentParser(prog="autonode cleanup")
     parser.add_argument(
@@ -113,10 +104,15 @@ def _run_cleanup_cli(args_list: list[str]) -> None:
         action="store_true",
         help="Rimuovere il branch dopo la pulizia",
     )
-    args = parser.parse_args(args_list).__dict__
+
+    raw = {
+        "repo_path": parser.parse_args(args_list).repo_path,
+        "session_id": parser.parse_args(args_list).session_id,
+        "delete_branch": parser.parse_args(args_list).delete_branch,
+    }
 
     try:
-        run_cleanup(args)
+        run_cleanup(container.cleanup_use_case, raw)
         log.info("Cleanup completed")
     except ValidationError as e:
         log.error("Validation error: %s", e)
