@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from autonode.infrastructure.tools import codebase_search as cs
+from autonode.infrastructure.tools import search_tool as cs
 
 
 def test_search_codebase_python_fallback_finds_matches(tmp_path: Path) -> None:
@@ -15,7 +15,7 @@ def test_search_codebase_python_fallback_finds_matches(tmp_path: Path) -> None:
     (tmp_path / "sub").mkdir()
     (tmp_path / "sub" / "b.txt").write_text("no match here\n", encoding="utf-8")
 
-    lines, truncated = cs._search_with_python(tmp_path, "UNIQUE_MARKER_123")
+    lines, truncated = cs._search_with_python(tmp_path, ["UNIQUE_MARKER_123"])
     assert len(lines) == 1
     assert "a.txt:1:" in lines[0]
     assert truncated is False
@@ -25,21 +25,21 @@ def test_search_codebase_python_respects_max_results(tmp_path: Path) -> None:
     for i in range(60):
         (tmp_path / f"f{i}.txt").write_text(f"MANY {i}\n", encoding="utf-8")
 
-    lines, truncated = cs._search_with_python(tmp_path, "MANY")
+    lines, truncated = cs._search_with_python(tmp_path, ["MANY"])
     assert len(lines) == cs._MAX_RESULTS
     assert truncated is True
 
 
 def test_search_codebase_tool_empty_query() -> None:
     tool = cs.make_search_codebase_tool(".")
-    out = tool.invoke({"query": "   "})
-    assert "ERRORE" in out and "vuota" in out
+    out = tool.invoke({"queries": ["   "]})
+    assert "ERRORE" in out and "vuote" in out
 
 
 def test_make_search_codebase_invocation(tmp_path: Path) -> None:
     (tmp_path / "z.txt").write_text("findme_xyz\n", encoding="utf-8")
     tool = cs.make_search_codebase_tool(str(tmp_path))
-    out = tool.invoke({"query": "findme_xyz"})
+    out = tool.invoke({"queries": ["findme_xyz"]})
     assert "findme_xyz" in out or "z.txt" in out
 
 
@@ -47,10 +47,10 @@ def test_search_with_ripgrep_returns_none_when_rg_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "autonode.infrastructure.tools.codebase_search.shutil.which",
+        "autonode.infrastructure.tools.search_tool.shutil.which",
         lambda _: None,
     )
-    assert cs._search_with_ripgrep(Path("/tmp"), "x") is None
+    assert cs._search_with_ripgrep(Path("/tmp"), ["x"]) is None
 
 
 def test_search_with_ripgrep_reads_lines(
@@ -58,7 +58,7 @@ def test_search_with_ripgrep_reads_lines(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        "autonode.infrastructure.tools.codebase_search.shutil.which",
+        "autonode.infrastructure.tools.search_tool.shutil.which",
         lambda _: "/bin/fake_rg",
     )
 
@@ -78,11 +78,11 @@ def test_search_with_ripgrep_reads_lines(
     mock_proc.returncode = 0
 
     monkeypatch.setattr(
-        "autonode.infrastructure.tools.codebase_search.subprocess.Popen",
+        "autonode.infrastructure.tools.search_tool.subprocess.Popen",
         lambda *_a, **_k: mock_proc,
     )
 
-    result = cs._search_with_ripgrep(tmp_path, "q")
+    result = cs._search_with_ripgrep(tmp_path, ["q"])
     assert result is not None
     out_lines, truncated = result
     assert out_lines == ["a.py:1:alpha", "b.py:2:beta"]
@@ -94,7 +94,7 @@ def test_search_with_ripgrep_truncation_flag(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        "autonode.infrastructure.tools.codebase_search.shutil.which",
+        "autonode.infrastructure.tools.search_tool.shutil.which",
         lambda _: "/bin/fake_rg",
     )
 
@@ -114,11 +114,11 @@ def test_search_with_ripgrep_truncation_flag(
     mock_proc.returncode = 0
 
     monkeypatch.setattr(
-        "autonode.infrastructure.tools.codebase_search.subprocess.Popen",
+        "autonode.infrastructure.tools.search_tool.subprocess.Popen",
         lambda *_a, **_k: mock_proc,
     )
 
-    result = cs._search_with_ripgrep(tmp_path, "q")
+    result = cs._search_with_ripgrep(tmp_path, ["q"])
     assert result is not None
     out_lines, truncated = result
     assert len(out_lines) == cs._MAX_RESULTS

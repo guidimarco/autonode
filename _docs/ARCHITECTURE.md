@@ -5,7 +5,7 @@
 Il package `core/` contiene solo logica di dominio, dataclass `*Model` e port astratte.
 Le integrazioni concrete stanno in `infrastructure/`.
 `application/` orchestra il workflow (LangGraph) usando esclusivamente contratti del core.
-`presentation/` espone l'entrypoint CLI.
+`presentation/` espone gli entrypoint CLI e HTTP.
 
 ---
 
@@ -13,67 +13,37 @@ Le integrazioni concrete stanno in `infrastructure/`.
 
 ```text
 autonode/
-├── config_examples/              # Templates
+├── config_examples/                # Config Templates
 │   ├── agents.example.yaml
 │   └── workflow.example.yaml
 ├── src/autonode/
-│   ├── core/
-│   │   ├── agents/
-│   │   │   ├── models.py          # AgentModel
-│   │   │   ├── parser.py          # parse_agents()
-│   │   │   └── ports.py           # AgentFactoryPort
-│   │   ├── sandbox/
-│   │   │   ├── exceptions.py      # SandboxImageNotFoundError
-│   │   │   ├── models.py          # WorkspaceBindingModel, ExecutionEnvironmentModel
-│   │   │   └── ports.py           # SandboxProviderPort
-│   │   ├── logging.py             # AutonodeLogger + LoggerFactory (contract + registry)
-│   │   ├── tools/
-│   │   │   └── ports.py           # ToolPort, ToolRegistryPort
-│   │   └── workflow/
-│   │       ├── models.py          # WorkflowModel, WorkflowNodeModel, RoutingRule, …
-│   │       ├── parser.py          # parse_workflow() — validazione topologia (NetworkX)
-│   │       └── ports.py           # VCSProviderPort
-│   ├── application/
-│   │   ├── use_cases/
-│   │   │   ├── run_workflow_uc.py # RunWorkflowUseCase
-│   │   │   └── cleanup_uc.py      # CleanupSessionsUseCase
-│   │   └── workflow/
-│   │       ├── builder.py         # build_graph() — compila StateGraph LangGraph
-│   │       ├── post_processing.py # run_post_processing()
-│   │       └── state.py           # GraphWorkflowState (`review_verdict`), make_initial_graph_state()
-│   ├── infrastructure/
-│   │   ├── config/
-│   │   │   ├── agents_schema.py   # AgentsYamlSchema (Pydantic) + to_core()
-│   │   │   ├── workflow_schema.py # WorkflowYamlSchema (Pydantic) + to_core()
-│   │   │   └── loader.py          # load_workflow_config(), load_agents_config()
-│   │   ├── logging/
-│   │   │   └── stderr_adapter.py  # StandardErrorAutonodeLogger su sys.stderr
-│   │   ├── factory/
-│   │   │   ├── agent_factory.py # LangChainAgentFactory (AgentFactoryPort)
-│   │   │   └── review_verdict_schema.py # ReviewVerdictSchema (Pydantic) → ReviewVerdictModel
-│   │   ├── sandbox/
-│   │   │   └── docker_adapter.py  # DockerAdapter (SandboxProviderPort)
-│   │   ├── tools/
-│   │   │   ├── registry.py        # ToolRegistry (ToolRegistryPort)
-│   │   │   ├── path_guard.py      # PathGuard, resolve_under_root()
-│   │   │   ├── ignore_rules.py    # should_skip(), SKIP_DIR_NAMES
-│   │   │   ├── repository_map.py  # make_get_repository_map_tool()
-│   │   │   └── codebase_search.py # make_search_codebase_tool()
-│   │   ├── vcs/
-│   │   │   └── git_worktree_provider.py  # GitWorktreeProvider (VCSProviderPort)
-│   │   └── tracing.py             # configure_tracing(), get_run_metadata()
-│   └── presentation/
-│       ├── cli.py                 # main() — entrypoint CLI
-│       ├── cleanup/
-│       │   ├── handlers.py        # run_cleanup()
-│       │   └── models.py          # CleanupRequest (Pydantic)
-│       ├── mcp/
-│       │   ├── server.py          # FastMCP stdio + tool ``run_workflow`` → handler workflow
-│       │   ├── models.py          # mapping risposta MCP (success/error)
-│       │   └── stdio_safe.py      # logging su stderr + isolamento fd stdout durante run
-│       └── workflow/
-│           ├── handlers.py        # run_workflow()
-│           └── models.py          # WorkflowRunRequest (Pydantic)
+│   │
+│   ├── core/                       # Core: app core logic
+│   │   ├── agents/                 # Agents: models, parser and ports
+│   │   ├── sandbox/                # Sandbox: models, ports and exception
+│   │   ├── logging.py              # AutonodeLogger + LoggerFactory (contract + registry)
+│   │   ├── tools/                  # Tools: ports and registry
+│   │   └── workflow/               # Workflow: models, parser and ports
+│   │
+│   ├── application/                # Use Cases
+│   │   ├── use_cases/              # RunWorkflow, CleanupSessions
+│   │   └── workflow/               # RunWorkflow utils: builder, post processing and state
+│   │
+│   ├── infrastructure/             # Adapters
+│   │   ├── config/                 # Config Validation Schemas (YAML) and loaders
+│   │   ├── logging/                # StandardErrorAutonodeLogger
+│   │   ├── factory/                # LangChain factory and verdict schema
+│   │   ├── sandbox/                # Docker adapter
+│   │   ├── tools/                  # Tool registry and tools: aider, search codebase, ...
+│   │   ├── vcs/                    # Git adapter
+│   │   └── tracing.py              # configure_tracing(), get_run_metadata()
+│   │
+│   └── presentation/               # Entrypoints, handlers and validations (pydantic)
+│       ├── cli.py                  # CLI entrypoint
+│       ├── api.py                  # FastAPI gateway (`POST /execute`)
+│       ├── cleanup/                # Cleanup handlers and models
+│       ├── mcp/                    # MCP entrypoint
+│       └── workflow/               # Workflow handlers and models
 └── tests/
   ├── testdata/
   │   ├── agents.yaml
@@ -150,7 +120,9 @@ Flusso:
 ## Stato corrente degli entrypoint
 
 - `presentation/cli.py`: entrypoint operativo. Sottocomando `cleanup` per worktree sotto `.autonode/worktrees/` e container `autonode-sandbox-*`. Sottocomando `mcp` per avviare il server MCP su stdio. Sottocomando default per eseguire un workflow.
+- `presentation/api.py`: gateway HTTP minimale (FastAPI) con `POST /execute` protetto da `X-API-Key` (`AUTONODE_API_KEY`), che invoca lo stesso handler workflow.
 - Dopo ogni run workflow, `RunWorkflowUseCase` rimuove in `finally` il container sandbox e il worktree di sessione; il **branch locale** `autonode/session-*` resta nel repo (nessun `git push` nel flusso standard).
+- `RunWorkflowUseCase` usa checkpoint persistente SQLite (`autonode.db` in root progetto) come default quando non viene iniettato un checkpointer esterno; la continuità di stato è legata al `thread_id`.
 - `infrastructure/vcs/git_worktree_provider.py`: provisioning worktree, commit locale (`commit_changes`), rimozione worktree per sessione / globale, branch `autonode/session-*`, e `cleanup_orphaned_worktrees` (TTL) usato dal `cleanup --prune` della CLI.
 - MCP (stdio): presente in `presentation/mcp/`; tool `run_workflow` invoca `presentation/workflow/handlers.run_workflow` con logging su stderr e isolamento temporaneo di fd stdout durante l’esecuzione. Path YAML di default: `config/workflow.yaml` e `config/agents.yaml` relativi alla root del repository (risolti da `Path(__file__)` in `server.py`). API HTTP remote: non presenti nel codice corrente.
 

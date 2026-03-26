@@ -1,11 +1,12 @@
 """
-Codebase text search tool: bounded matches (50) under the sandbox root.
+Codebase text search tool: bounded multi-query matches under the sandbox root.
 """
 
 from __future__ import annotations
 
 import shutil
 import subprocess
+from collections import OrderedDict
 from pathlib import Path
 
 from langchain_core.tools import BaseTool, tool
@@ -26,12 +27,19 @@ def _rg_glob_excludes() -> list[str]:
     return out
 
 
-def _search_with_ripgrep(root: Path, query: str) -> tuple[list[str], bool] | None:
-    """
-    Return (lines, truncated) using ripgrep, or None if rg is unavailable / failed.
-    Reads at most _MAX_RESULTS + 1 lines from stdout to detect truncation
-    without loading all output.
-    """
+def _normalize_queries(queries: list[str]) -> list[str]:
+    unique: OrderedDict[str, None] = OrderedDict()
+    for raw in queries:
+        q = (raw or "").strip()
+        if not q:
+            continue
+        if len(q) > _MAX_QUERY_LEN:
+            raise ValueError(f"query troppo lunga (max {_MAX_QUERY_LEN} caratteri): '{q[:60]}'")
+        unique[q] = None
+    return list(unique.keys())
+
+
+def _search_with_ripgrep(root: Path, queries: list[str]) -> tuple[list[str], bool] | None:
     rg = shutil.which("rg")
     if not rg:
         return None
@@ -44,10 +52,11 @@ def _search_with_ripgrep(root: Path, query: str) -> tuple[list[str], bool] | Non
         "--max-columns",
         "500",
         *_rg_glob_excludes(),
-        "--",
-        query,
-        str(root),
     ]
+    for q in queries:
+        cmd.extend(["-e", q])
+    cmd.extend(["--", str(root)])
+
     try:
         proc = subprocess.Popen(
             cmd,
@@ -83,12 +92,10 @@ def _search_with_ripgrep(root: Path, query: str) -> tuple[list[str], bool] | Non
     return lines_out[:_MAX_RESULTS], truncated
 
 
-def _search_with_python(root: Path, query: str) -> tuple[list[str], bool]:
+def _search_with_python(root: Path, queries: list[str]) -> tuple[list[str], bool]:
     matches: list[str] = []
     for path in root.rglob("*"):
-        if not path.is_file():
-            continue
-        if should_skip(path):
+        if not path.is_file() or should_skip(path):
             continue
         try:
             st = path.stat()
@@ -102,55 +109,85 @@ def _search_with_python(root: Path, query: str) -> tuple[list[str], bool]:
             continue
         if b"\x00" in data[:4096]:
             continue
+
         text = data.decode("utf-8", errors="replace")
+        rel = path.relative_to(root)
         for lineno, line in enumerate(text.splitlines(), 1):
-            if query not in line:
+            if not any(q in line for q in queries):
                 continue
-            rel = path.relative_to(root)
             preview = line.strip()
             if len(preview) > _MAX_LINE_PREVIEW:
-                preview = preview[:_MAX_LINE_PREVIEW] + "…"
+                preview = preview[:_MAX_LINE_PREVIEW] + "..."
             matches.append(f"{rel}:{lineno}:{preview}")
             if len(matches) > _MAX_RESULTS:
                 return matches[:_MAX_RESULTS], True
     return matches, False
 
 
+def _group_hits(lines: list[str], queries: list[str]) -> dict[str, list[str]]:
+    grouped: dict[str, list[str]] = {q: [] for q in queries}
+    seen: set[tuple[str, str]] = set()
+    for line in lines:
+        for q in queries:
+            if q in line:
+                key = (q, line)
+                if key in seen:
+                    continue
+                grouped[q].append(line)
+                seen.add(key)
+    return grouped
+
+
+def _render_grouped(grouped: dict[str, list[str]], truncated: bool) -> str:
+    blocks: list[str] = []
+    for q, hits in grouped.items():
+        blocks.append(f"## query: {q}")
+        if hits:
+            blocks.extend(hits)
+        else:
+            blocks.append("(nessun risultato)")
+        blocks.append("")
+    body = "\n".join(blocks).rstrip()
+    if truncated:
+        body += (
+            f"\n\n_AVVISO: risultati limitati a {_MAX_RESULTS} righe complessive; "
+            "raffina le query o restringi il percorso con altri tool._"
+        )
+    return body
+
+
 def make_search_codebase_tool(root_dir: str) -> BaseTool:
-    """Factory: LangChain tool for bounded substring search under ``root_dir``."""
+    """Factory: LangChain tool for bounded multi-query search under ``root_dir``."""
 
     root_abs = resolved_root(root_dir)
 
     @tool
-    def search_codebase(query: str) -> str:
+    def search_codebase(queries: list[str]) -> str:
         """
-        Cerca una stringa in tutti i file testuali sotto la root del task (limite 50 risultati).
-        Restituisce path:relative, numero di riga e anteprima della riga.
+        Cerca piu stringhe in tutti i file testuali sotto la root del task.
+        Restituisce path relativo, numero di riga e anteprima, raggruppati per query.
         """
-        q = (query or "").strip()
-        if not q:
-            return "ERRORE: query vuota."
-        if len(q) > _MAX_QUERY_LEN:
-            return f"ERRORE: query troppo lunga (max {_MAX_QUERY_LEN} caratteri)."
+        try:
+            normalized = _normalize_queries(queries or [])
+        except ValueError as e:
+            return f"ERRORE: {e}"
 
-        rg_result = _search_with_ripgrep(root_abs, q)
+        if not normalized:
+            return "ERRORE: queries vuote."
+
+        rg_result = _search_with_ripgrep(root_abs, normalized)
         if rg_result is not None:
             lines, truncated = rg_result
         else:
-            lines, truncated = _search_with_python(root_abs, q)
+            lines, truncated = _search_with_python(root_abs, normalized)
 
         if not lines:
             return (
-                "Nessun risultato per la query indicata "
+                "Nessun risultato per le query indicate "
                 "(entro la sandbox e le regole di esclusione)."
             )
 
-        body = "\n".join(lines)
-        if truncated:
-            body += (
-                f"\n\n_AVVISO: risultati limitati a {_MAX_RESULTS} occorrenze; "
-                "raffina la query o restringi il percorso con altri tool._"
-            )
-        return body
+        grouped = _group_hits(lines, normalized)
+        return _render_grouped(grouped, truncated)
 
     return search_codebase
