@@ -3,9 +3,9 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from dotenv import load_dotenv
 from pathlib import Path
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field, ValidationError
 

@@ -20,6 +20,7 @@ def run_server(container: AppContainer, port: int, host: str, log_level: int) ->
     - MCP stdio
     """
     import uvicorn
+
     from autonode.presentation.api import app
     from autonode.presentation.mcp.server import run_mcp_server
     from autonode.presentation.mcp.stdio_safe import configure_mcp_stdio_logging
@@ -44,7 +45,7 @@ def run_server(container: AppContainer, port: int, host: str, log_level: int) ->
         reload=False,
     )
     server = uvicorn.Server(config)
-    
+
     try:
         # --- Start MCP ---
         mcp_thread.start()
@@ -69,9 +70,9 @@ def run_server(container: AppContainer, port: int, host: str, log_level: int) ->
             log.error("Error closing checkpoint manager: %s", e)
 
         import sys
+
         sys.stdout.flush()
         sys.stderr.flush()
-        
+
         log.info("Exiting...")
         os._exit(0)
-

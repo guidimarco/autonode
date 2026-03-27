@@ -147,13 +147,8 @@ def test_none_workflow_path_uses_field_default(tmp_path: Path) -> None:
     assert req.workflow_path == "config/workflow.yaml"
 
 
-def test_accepts_testdata_yaml_paths() -> None:
+def test_accepts_testdata_yaml_paths(tmp_path: Path) -> None:
     import shutil
-
-    tmp_path = Path("tmp_testdata_repo")
-    if tmp_path.exists():
-        shutil.rmtree(tmp_path)
-    tmp_path.mkdir(parents=True, exist_ok=True)
 
     (tmp_path / ".git").mkdir(parents=True, exist_ok=True)
     config_dir = tmp_path / "config"

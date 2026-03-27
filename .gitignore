@@ -10,9 +10,7 @@ __pycache__/
 .cursor/
 _meta/
 config/
-autodone.db
-autonode.db-shm
-autonode.db-wal
+.autonode/
 
 # App Runtime
 .venv/

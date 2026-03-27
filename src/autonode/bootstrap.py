@@ -34,8 +34,10 @@ def bootstrap_app() -> AppContainer:
     One time only.
     """
     # 1. Infrastructure: Singleton
-    db_path = os.environ.get("AUTONODE_DB_PATH", "./autonode.db")
-    cp_manager = SqliteCheckpointManager(db_path=Path(db_path))
+    db_path = os.environ.get("AUTONODE_DB_PATH", "/app/.autonode/db/autonode.db")
+    db_file = Path(db_path).absolute()
+    db_file.parent.mkdir(parents=True, exist_ok=True)
+    cp_manager = SqliteCheckpointManager(db_path=db_file)
     # ^ ^ ^ Singleton SQLite checkpoint manager: open the connection once per process
     vcs = GitWorktreeProvider()
     sandbox = DockerAdapter()

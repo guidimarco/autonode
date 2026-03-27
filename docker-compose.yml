@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  autonode:
+    build: .
+    user: "${CURRENT_UID}:${CURRENT_GID}"
+    container_name: autonode
+    restart: always
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      # DB and outputs
+      - ./.autonode/db:/app/.autonode/db
+      - ./.autonode/outputs:/app/.autonode/outputs
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 8000:8000
+    networks:
+      - autonode-network
+
+  appsmith:
+    image: index.docker.io/appsmith/appsmith-ce
+    container_name: appsmith
+    restart: always
+    ports:
+      - 8080:80
+    volumes:
+      - ./.autonode/appsmith:/appsmith-stack
+    networks:
+      - autonode-network
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: ngrok
+    restart: always
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_AUTHTOKEN}
+    command:
+      - "http"
+      - "appsmith:80"
+      - "--url=deltaic-dicastic-zayn.ngrok-free.dev"
+    networks:
+      - autonode-network
+    depends_on:
+      - appsmith
+
+networks:
+  autonode-network:
+    driver: bridge
