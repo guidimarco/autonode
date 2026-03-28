@@ -1,6 +1,6 @@
-from pathlib import Path
-
 from pydantic import BaseModel, Field, field_validator
+
+from autonode.infrastructure.paths.repo_resolution import ensure_git_repo_under_root
 
 
 class CleanupRequest(BaseModel):
@@ -10,7 +10,7 @@ class CleanupRequest(BaseModel):
 
     repo_path: str = Field(
         default=".",
-        description="Git root repository path (directory that contains .git).",
+        description="Root Git sotto REPOS_ROOT: path relativo o assoluto entro la stessa radice.",
     )
     session_id: str | None = Field(
         default=None,
@@ -24,9 +24,9 @@ class CleanupRequest(BaseModel):
     @field_validator("repo_path")
     @classmethod
     def is_git_repo(cls, v: str) -> str:
-        path = Path(v)
+        path = ensure_git_repo_under_root(v)
         if not path.is_dir():
             raise ValueError(f"The path {v} does not exist.")
         if not (path / ".git").exists():
             raise ValueError(f"The path {v} is not a Git repository.")
-        return v
+        return str(path)

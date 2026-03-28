@@ -26,7 +26,7 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su `review_verdi
 - **`infrastructure/`**: **parzialmente solido**.
   - Tool: “Map/Search/PathGuard/Aider” (shell/aider in container quando `ToolRegistry` è costruito con `execution_env` Docker).
   - Factory agenti ci sono;
-  - VCS: `GitWorktreeProvider` (layout `../autonode_sessions/<id>/workspace|outputs`) + cleanup; usato dal CLI insieme a `DockerAdapter`.
+  - VCS: `GitWorktreeProvider` (layout `{REPOS_ROOT}/autonode_docker/<id>/workspace|outputs`; log/stato sotto `DATA_ROOT`) + cleanup; usato dal CLI insieme a `DockerAdapter`.
   - Sandbox Docker: immagine `autonode-sandbox:latest` costruita da `docker/sandbox.Dockerfile` con contesto `.` (cwd = root repo); `DockerAdapter` inietta nel container le API key note (`OPENAI_*`, `ANTHROPIC_*`, `OPEN_ROUTER_*`) per Aider/provider.
 - **`presentation/`**: entrypoint CLI operativo; server MCP stdio (`autonode mcp`) in `presentation/mcp/`.
   - `cli.py` esegue il **bootstrap** (Git worktree + container Docker) **prima** di `graph.invoke()`; il grafo non avvia mai tool senza `execution_env` valido nello stato.

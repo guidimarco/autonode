@@ -10,6 +10,9 @@ import pytest
 from autonode.core.sandbox.models import ExecutionEnvironmentModel
 from autonode.infrastructure.tools.aider_tool import resolve_aider_model
 from autonode.infrastructure.tools.registry import ToolRegistry
+from tests.stubs.session_logger import make_test_session_logger
+
+_TEST_SID = "550e8400-e29b-41d4-a716-446655440002"
 
 
 def test_resolve_aider_model_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -26,12 +29,12 @@ def test_tool_registry_rejects_host_runtime(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     env = ExecutionEnvironmentModel(
-        session_id="s",
+        session_id=_TEST_SID,
         sandbox_id="host-runtime",
         repo_host_path=str(repo),
     )
     with pytest.raises(ValueError, match="host"):
-        ToolRegistry(execution_env=env)
+        ToolRegistry(execution_env=env, session_logger=make_test_session_logger())
 
 
 def test_registry_exposes_expected_tools(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -63,11 +66,11 @@ def test_registry_exposes_expected_tools(tmp_path: Path, monkeypatch: pytest.Mon
     repo = tmp_path / "repo"
     repo.mkdir()
     env = ExecutionEnvironmentModel(
-        session_id="s",
+        session_id=_TEST_SID,
         sandbox_id="sandbox-1",
         repo_host_path=str(repo),
     )
-    registry = ToolRegistry(execution_env=env)
+    registry = ToolRegistry(execution_env=env, session_logger=make_test_session_logger())
     available = registry.list_available_tools()
     assert "shell" in available
     assert "aider" in available

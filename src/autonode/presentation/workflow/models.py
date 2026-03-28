@@ -2,6 +2,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
+from autonode.infrastructure.paths.repo_resolution import ensure_git_repo_under_root
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
 _PROJECT_CONFIG_ROOT = _PROJECT_ROOT / "config"
 
@@ -31,7 +33,7 @@ class WorkflowRunRequest(BaseModel):
     )
     repo_path: str = Field(
         default=".",
-        description="Git root repository path (directory that contains .git).",
+        description="Root Git sotto REPOS_ROOT: path relativo o assoluto entro la stessa radice.",
     )
     thread_id: str | None = Field(
         default=None,
@@ -60,12 +62,12 @@ class WorkflowRunRequest(BaseModel):
     @field_validator("repo_path")
     @classmethod
     def is_git_repo(cls, v: str) -> str:
-        path = Path(v)
+        path = ensure_git_repo_under_root(v)
         if not path.is_dir():
             raise ValueError(f"The path {v} does not exist.")
         if not (path / ".git").exists():
             raise ValueError(f"The path {v} is not a Git repository.")
-        return v
+        return str(path)
 
     @model_validator(mode="after")
     def validate_config_paths(self) -> "WorkflowRunRequest":

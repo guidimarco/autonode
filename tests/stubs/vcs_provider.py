@@ -21,8 +21,8 @@ class StubVcsProviderForCompileTests(VCSProviderPort):
         _ = (worktree_path, message)
         return ""
 
-    def remove_session_worktree(self, repo_path: str, session_id: str) -> None:
-        _ = (repo_path, session_id)
+    def remove_session_worktree(self, session_id: str, repo_path: str) -> None:
+        _ = (session_id, repo_path)
 
     def remove_all_session_worktrees(self, repo_path: str) -> None:
         _ = repo_path

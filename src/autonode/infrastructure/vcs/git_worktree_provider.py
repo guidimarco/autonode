@@ -11,22 +11,25 @@ import subprocess
 import time
 from pathlib import Path
 
+import autonode.core.sandbox.session_paths as session_paths
 from autonode.core.sandbox.models import WorkspaceBindingModel
-from autonode.core.sandbox.session_paths import (
-    outputs_host,
-    session_root_host,
-    worktree_host,
-)
 from autonode.core.workflow.ports import VCSProviderPort
+from autonode.infrastructure.paths.repo_resolution import ensure_git_repo_under_root
 
 logger = logging.getLogger(__name__)
 
 _SESSION_ID_MARKER_FILENAME = ".autonode_session_id"
+_SOURCE_REPO_METADATA = ".source_repo"
 
 
 def _branch_label_for_session(session_id: str) -> str:
     token = re.sub(r"[^a-zA-Z0-9._-]+", "-", session_id.strip()).strip("-") or "session"
     return f"autonode/session-{token[:80]}"
+
+
+def _repo_rel_posix(repo: Path) -> str:
+    root = Path(session_paths.REPOS_ROOT).resolve()
+    return repo.resolve().relative_to(root).as_posix()
 
 
 class GitWorktreeProvider(VCSProviderPort):
@@ -57,26 +60,35 @@ class GitWorktreeProvider(VCSProviderPort):
         ts = float(birth) if birth is not None else float(st.st_mtime)
         return max(0.0, time.time() - ts)
 
-    def _sessions_root(self, repo: Path) -> Path:
-        return (repo.parent / "autonode_sessions").resolve()
+    @staticmethod
+    def _session_repo_matches(session_root: Path, expected_rel_posix: str) -> bool:
+        meta = session_root / _SOURCE_REPO_METADATA
+        if not meta.is_file():
+            return False
+        return meta.read_text(encoding="utf-8").strip() == expected_rel_posix
 
     def setup_session_worktree(self, session_id: str, repo_path: str) -> WorkspaceBindingModel:
-        repo = Path(repo_path).resolve()
+        repo = ensure_git_repo_under_root(repo_path)
         branch_name = _branch_label_for_session(session_id)
 
         if not (repo / ".git").exists():
             msg = (
-                f"La directory {repo} non è una checkout Git (.git assente): "
-                "impossibile creare un worktree isolato."
+                f"The directory {repo} is not a Git checkout (.git missing): "
+                "impossible to create an isolated worktree."
             )
             raise RuntimeError(msg)
 
-        session_root = Path(session_root_host(str(repo), session_id))
-        wt = Path(worktree_host(str(repo), session_id))
-        out = Path(outputs_host(str(repo), session_id))
+        session_root = Path(session_paths.session_op_root(session_id))
+        wt = Path(session_paths.session_workspace_path(session_id))
+        out = Path(session_paths.session_outputs_path(session_id))
 
         session_root.mkdir(parents=True, exist_ok=True)
         out.mkdir(parents=True, exist_ok=True)
+
+        (session_root / _SOURCE_REPO_METADATA).write_text(
+            _repo_rel_posix(repo),
+            encoding="utf-8",
+        )
 
         if wt.exists():
             shutil.rmtree(wt)
@@ -128,39 +140,46 @@ class GitWorktreeProvider(VCSProviderPort):
 
         return commit_hash
 
-    def remove_session_worktree(self, repo_path: str, session_id: str) -> None:
-        repo = Path(repo_path).resolve()
-        wt = Path(worktree_host(str(repo), session_id))
-        session_root = Path(session_root_host(str(repo), session_id))
+    def remove_session_worktree(self, session_id: str, repo_path: str) -> None:
+        repo = ensure_git_repo_under_root(repo_path)
+        wt = Path(session_paths.session_workspace_path(session_id))
+        session_root = Path(session_paths.session_op_root(session_id))
 
         if wt.is_dir():
             self._git_worktree_remove(repo, wt)
-        if session_root.exists():
-            shutil.rmtree(session_root, ignore_errors=True)
-            logger.info("Sessione %s rimossa: %s", session_id, session_root)
+            logger.info("Worktree sessione %s rimosso: %s", session_id, wt)
         self._git_worktree_prune(repo)
 
+        if session_root.is_dir():
+            shutil.rmtree(session_root, ignore_errors=True)
+            logger.info(
+                "Cartella operativa Docker rimossa (dati persistenti in DATA_ROOT): %s",
+                session_root,
+            )
+
     def remove_all_session_worktrees(self, repo_path: str) -> None:
-        repo = Path(repo_path).resolve()
-        root = self._sessions_root(repo)
+        repo = ensure_git_repo_under_root(repo_path)
+        expected_rel = _repo_rel_posix(repo)
+        root = Path(session_paths.docker_sessions_root())
         if not root.is_dir():
-            logger.info("Nessuna directory autonode_sessions sotto %s", root)
+            logger.info("Nessuna directory autonode_docker: %s", root)
             return
 
         for child in sorted(root.iterdir()):
             if not child.is_dir():
                 continue
+            if not self._session_repo_matches(child, expected_rel):
+                continue
             workspace = child / "workspace"
             if workspace.is_dir():
                 self._git_worktree_remove(repo, workspace)
-            shutil.rmtree(child, ignore_errors=True)
-            logger.info("Sessione rimossa: %s", child)
+            logger.info("Worktree rimosso (cartella sessione conservata): %s", child)
 
         self._git_worktree_prune(repo)
-        logger.info("Rimosse tutte le sessioni sotto %s", root)
+        logger.info("Rimossi i worktree per repo %s sotto %s", expected_rel, root)
 
     def delete_session_branch(self, repo_path: str, session_id: str) -> None:
-        repo = Path(repo_path).resolve()
+        repo = ensure_git_repo_under_root(repo_path)
         branch = _branch_label_for_session(session_id)
         result = subprocess.run(
             ["git", "-C", str(repo), "branch", "-D", branch],
@@ -178,7 +197,7 @@ class GitWorktreeProvider(VCSProviderPort):
             )
 
     def delete_all_session_branches(self, repo_path: str) -> None:
-        repo = Path(repo_path).resolve()
+        repo = ensure_git_repo_under_root(repo_path)
         listed = subprocess.run(
             [
                 "git",
@@ -206,11 +225,12 @@ class GitWorktreeProvider(VCSProviderPort):
 
     def cleanup_orphaned_worktrees(self, repo_path: str, ttl_days: int = 1) -> list[str]:
         """
-        Sotto ``<repo.parent>/autonode_sessions/<session_id>/``, rimuove directory sessione
-        più vecchie di ``ttl_days`` (mtime/birthtime della cartella sessione).
+        Under ``{REPOS_ROOT}/autonode_docker/<session_id>/``, remove worktree and operational folder
+        for this repository older than ``ttl_days``.
         """
-        repo = Path(repo_path).resolve()
-        root = self._sessions_root(repo)
+        repo = ensure_git_repo_under_root(repo_path)
+        expected_rel = _repo_rel_posix(repo)
+        root = Path(session_paths.docker_sessions_root())
         if not root.is_dir():
             return []
 
@@ -220,12 +240,15 @@ class GitWorktreeProvider(VCSProviderPort):
         for child in sorted(root.iterdir()):
             if not child.is_dir():
                 continue
+            if not self._session_repo_matches(child, expected_rel):
+                continue
             if self._path_age_seconds(child) <= ttl_seconds:
                 continue
             workspace = child / "workspace"
             if workspace.is_dir():
                 self._git_worktree_remove(repo, workspace)
-            shutil.rmtree(child, ignore_errors=True)
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
             removed.append(str(child))
 
         if removed:

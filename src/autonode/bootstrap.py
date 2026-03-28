@@ -8,6 +8,7 @@ from typing import Any, cast
 from autonode.application.use_cases.cleanup_uc import CleanupSessionsUseCase
 from autonode.application.use_cases.run_workflow_uc import RunWorkflowUseCase
 from autonode.core.agents.ports import AgentFactoryPort
+from autonode.core.logging import AutonodeLogger
 from autonode.core.sandbox.models import ExecutionEnvironmentModel
 from autonode.core.tools.ports import ToolRegistryPort
 from autonode.infrastructure.factory.agent_factory import LangChainAgentFactory
@@ -43,8 +44,11 @@ def bootstrap_app() -> AppContainer:
     sandbox = DockerAdapter()
 
     # 2. Factories: Tool Registry and Agent Factory
-    def tool_registry_factory(env: ExecutionEnvironmentModel) -> ToolRegistryPort:
-        return ToolRegistry(execution_env=env)
+    def tool_registry_factory(
+        env: ExecutionEnvironmentModel,
+        session_logger: AutonodeLogger,
+    ) -> ToolRegistryPort:
+        return ToolRegistry(execution_env=env, session_logger=session_logger)
 
     def agent_factory_provider(path: str, registry: ToolRegistryPort) -> AgentFactoryPort:
         return LangChainAgentFactory(

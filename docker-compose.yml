@@ -10,18 +10,24 @@ services:
     restart: always
     env_file:
       - .env
+    volumes:
+      - ..:/src
+      # ^ ^ ^ Checkpoint manager (SQLite)
+      - ${HOST_DATA_ROOT}:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /src/autonode
     environment:
+      - PYTHONPATH=/src/autonode
+      - SESSION_DIR=/src/autonode_docker
+      - REPOS_ROOT=/src
+      - DATA_ROOT=/data
+      - DATA_DB_PATH=/data/autonode.db
+      - HOST_PROJECTS_ROOT=${HOST_PROJECTS_ROOT}
+      - HOST_DATA_ROOT=${HOST_DATA_ROOT}
       - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}
       - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL}
       - GIT_COMMITTER_NAME=${GIT_AUTHOR_NAME}
       - GIT_COMMITTER_EMAIL=${GIT_AUTHOR_EMAIL}
-    volumes:
-      - .:/app
-      - ../autonode_sessions:/autonode_sessions
-      # ^ ^ ^ Session folder for worktree and outputs
-      - ./.autonode/db:/app/.autonode/db
-      # ^ ^ ^ Checkpoint manager (SQLite)
-      - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - 8000:8000
     networks:
@@ -34,7 +40,7 @@ services:
     ports:
       - 8080:80
     volumes:
-      - ./.autonode/appsmith:/appsmith-stacks
+      - ${HOST_DATA_ROOT}/appsmith:/appsmith-stacks
     networks:
       - autonode-network
 

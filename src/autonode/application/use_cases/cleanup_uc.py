@@ -23,7 +23,7 @@ class CleanupSessionsUseCase:
 
     def execute(self, request: CleanupUseCaseRequest) -> None:
         if request.session_id:
-            self.vcs.remove_session_worktree(request.repo_path, request.session_id)
+            self.vcs.remove_session_worktree(request.session_id, request.repo_path)
             self.sandbox.remove_session_sandbox(request.session_id)
             if request.delete_branch:
                 self.vcs.delete_session_branch(request.repo_path, request.session_id)

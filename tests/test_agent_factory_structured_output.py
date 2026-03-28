@@ -14,6 +14,7 @@ from autonode.core.sandbox.models import ExecutionEnvironmentModel
 from autonode.infrastructure.factory.agent_factory import LangChainAgentFactory
 from autonode.infrastructure.factory.review_verdict_schema import ReviewVerdictSchema
 from autonode.infrastructure.tools.registry import ToolRegistry
+from tests.stubs.session_logger import make_test_session_logger
 
 
 def _minimal_agents_yaml(path: Path) -> str:
@@ -30,15 +31,18 @@ agents:
     return str(p)
 
 
+_TEST_SID = "550e8400-e29b-41d4-a716-446655440001"
+
+
 def _registry(tmp_path: Path) -> ToolRegistry:
     repo = tmp_path / "repo"
     repo.mkdir()
     env = ExecutionEnvironmentModel(
-        session_id="factory-structured-test",
-        sandbox_id="factory-structured-test",
+        session_id=_TEST_SID,
+        sandbox_id=_TEST_SID,
         repo_host_path=str(repo),
     )
-    return ToolRegistry(execution_env=env)
+    return ToolRegistry(execution_env=env, session_logger=make_test_session_logger())
 
 
 def test_create_agent_structured_output_maps_parsed_schema_to_core(tmp_path: Path) -> None:

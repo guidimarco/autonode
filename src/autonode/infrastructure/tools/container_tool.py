@@ -13,7 +13,7 @@ from docker.client import DockerClient
 from langchain_core.tools import BaseTool, tool
 
 import docker
-from autonode.core.logging import LoggerFactory
+from autonode.core.logging import AutonodeLogger
 from autonode.core.sandbox.models import (
     CONTAINER_WORKSPACE_PATH,
     ExecutionEnvironmentModel,
@@ -32,6 +32,7 @@ def docker_exec(
     environment: ExecutionEnvironmentModel,
     command: list[str],
     *,
+    session_logger: AutonodeLogger,
     env_vars: dict[str, str] | None = None,
     timeout: int | None = None,
 ) -> DockerExecResult:
@@ -51,15 +52,18 @@ def docker_exec(
         )
 
     with ThreadPoolExecutor(max_workers=1) as pool:
+        """
+        With FutureTimeout we avoid raising TimeoutError from the thread pool.
+        """
         future = pool.submit(_run)
         try:
             exit_code, streams = future.result(timeout=effective_timeout)
         except FutureTimeout:
-            LoggerFactory.get_logger().warning(
-                "[DOCKER_EXEC] > timeout (%ss) superato.",
+            session_logger.warning(
+                "[DOCKER_EXEC] > timeout (%ss) exceeded.",
                 effective_timeout,
             )
-            raise TimeoutError(f"timeout ({effective_timeout}s) superato") from None
+            raise TimeoutError(f"timeout ({effective_timeout}s) exceeded") from None
 
     if streams is None:
         stdout_b, stderr_b = b"", b""
@@ -70,18 +74,23 @@ def docker_exec(
     return DockerExecResult(stdout=stdout, stderr=stderr, exit_code=exit_code)
 
 
-def _log_stream_lines(prefix: str, content: str) -> None:
-    logger = LoggerFactory.get_logger()
+def _log_stream_lines(session_logger: AutonodeLogger, prefix: str, content: str) -> None:
     for line in content.splitlines():
-        logger.info("%s%s", prefix, line)
+        session_logger.info("%s%s", prefix, line)
 
 
-def compose_output_and_mirror(*, stdout: str, stderr: str, prefix: str) -> str:
+def compose_output_and_mirror(
+    *,
+    session_logger: AutonodeLogger,
+    stdout: str,
+    stderr: str,
+    prefix: str,
+) -> str:
     if stdout:
-        _log_stream_lines(prefix, stdout)
+        _log_stream_lines(session_logger, prefix, stdout)
     output = stdout
     if stderr:
-        _log_stream_lines(f"{prefix}[stderr] ", stderr)
+        _log_stream_lines(session_logger, f"{prefix}[stderr] ", stderr)
         output += f"\n[stderr]\n{stderr}"
     return output or "(nessun output)"
 
@@ -89,6 +98,7 @@ def compose_output_and_mirror(*, stdout: str, stderr: str, prefix: str) -> str:
 def make_container_shell_tool(
     environment: ExecutionEnvironmentModel,
     path_guard: PathGuard,
+    session_logger: AutonodeLogger,
 ) -> BaseTool:
     @tool
     def shell(command: str) -> str:
@@ -102,9 +112,11 @@ def make_container_shell_tool(
             result = docker_exec(
                 environment,
                 ["/bin/bash", "-lc", command],
+                session_logger=session_logger,
                 timeout=60,
             )
             return compose_output_and_mirror(
+                session_logger=session_logger,
                 stdout=result.stdout,
                 stderr=result.stderr,
                 prefix="[DOCKER_EXEC] > ",
@@ -112,7 +124,7 @@ def make_container_shell_tool(
         except TimeoutError:
             return "ERRORE: timeout (60s) superato."
         except Exception as e:
-            LoggerFactory.get_logger().exception("[DOCKER_EXEC] > errore exec shell: %s", e)
+            session_logger.exception("[DOCKER_EXEC] > errore exec shell: %s", e)
             return f"ERRORE: {e}"
 
     return shell

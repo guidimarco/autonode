@@ -1,36 +1,33 @@
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from autonode.application.use_cases.run_workflow_uc import RunWorkflowUseCaseResponse
-from autonode.core.agents.models import ReviewVerdictModel
 from autonode.presentation.api import app
 
 
-def _success_response() -> RunWorkflowUseCaseResponse:
-    return RunWorkflowUseCaseResponse(
-        session_id="sid-1",
-        branch_name="autonode/session-sid-1",
-        verdict="approved",
-        review_verdict=ReviewVerdictModel(
-            is_approved=True,
-            feedback="ok",
-            missing_requirements=[],
-        ),
-        iteration=1,
-        final_output="done",
-        last_commit_hash="abc",
-    )
-
-
 def _stub_container() -> SimpleNamespace:
-    # API unit tests only require `run_workflow_use_case`.
     return SimpleNamespace(run_workflow_use_case=MagicMock())
+
+
+@pytest.fixture
+def repo_under_fake_src(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Repo Git minimale sotto un REPOS_ROOT fittizio (stessi vincoli di produzione)."""
+    fake_src = tmp_path / "src"
+    fake_src.mkdir()
+    fake_data = tmp_path / "data"
+    fake_data.mkdir()
+    monkeypatch.setattr("autonode.core.sandbox.session_paths.REPOS_ROOT", str(fake_src))
+    monkeypatch.setattr("autonode.core.sandbox.session_paths.DATA_ROOT", str(fake_data))
+    repo = fake_src / "repo"
+    repo.mkdir()
+    (repo / ".git").mkdir()
+    return "repo"
 
 
 def test_execute_unauthorized_without_matching_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -41,57 +38,38 @@ def test_execute_unauthorized_without_matching_api_key(monkeypatch: pytest.Monke
         "/execute",
         json={
             "prompt": "hello world",
-            "repo_path": "/repo",
+            "repo_path": "repo",
         },
     )
     assert response.status_code == 401
 
 
-def test_execute_maps_payload_and_returns_success(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_execute_returns_202_and_schedules_background(
+    monkeypatch: pytest.MonkeyPatch,
+    repo_under_fake_src: str,
+) -> None:
     monkeypatch.setenv("AUTONODE_API_KEY", "secret")
     app.state.container = _stub_container()
     client = TestClient(app)
-    with patch(
-        "autonode.presentation.api.run_autonode_workflow",
-        return_value=_success_response(),
-    ) as mock_run:
+    with patch("autonode.presentation.api._execute_workflow_background") as bg:
         response = client.post(
             "/execute",
             headers={"X-API-Key": "secret"},
             json={
                 "prompt": "hello world",
-                "repo_path": "/repo",
+                "repo_path": repo_under_fake_src,
             },
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 202
     payload = response.json()
-    assert payload["session_id"] == "sid-1"
-    assert payload["branch_name"] == "autonode/session-sid-1"
-    assert payload["verdict"] == "approved"
-    assert payload["final_output"] == "done"
-    mock_run.assert_called_once()
-    raw = mock_run.call_args[0][1]
+    assert "session_id" in payload
+    uuid.UUID(payload["session_id"])
+    bg.assert_called_once()
+    call = bg.call_args[0]
+    assert call[0] is app.state.container
+    raw = call[1]
     assert raw["prompt"] == "hello world"
-    assert raw["repo_path"] == "/repo"
-    uuid.UUID(raw["thread_id"])
-
-
-def test_execute_runtime_error_returns_500(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("AUTONODE_API_KEY", "secret")
-    app.state.container = _stub_container()
-    client = TestClient(app)
-    with patch(
-        "autonode.presentation.api.run_autonode_workflow",
-        side_effect=RuntimeError("boom"),
-    ):
-        response = client.post(
-            "/execute",
-            headers={"X-API-Key": "secret"},
-            json={
-                "prompt": "hello world",
-                "repo_path": "/repo",
-            },
-        )
-    assert response.status_code == 500
-    assert response.json()["detail"] == "Internal Server Error"
+    assert raw["thread_id"] == payload["session_id"]
+    resolved_repo = Path(raw["repo_path"]).resolve()
+    assert resolved_repo.name == "repo"

@@ -1,4 +1,4 @@
-"""Tests for session cleanup under ../autonode_sessions/."""
+"""Tests for session cleanup under REPOS_ROOT/autonode_docker/."""
 
 from __future__ import annotations
 
@@ -19,13 +19,18 @@ def _touch_dir_old(path: Path, days_ago: float) -> None:
 
 
 @pytest.fixture
-def repo_with_sessions(tmp_path: Path) -> Path:
-    root = tmp_path / "repo"
+def repo_with_sessions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    fake_src = tmp_path / "src"
+    fake_src.mkdir()
+    monkeypatch.setattr("autonode.core.sandbox.session_paths.REPOS_ROOT", str(fake_src))
+    root = fake_src / "myrepo"
     root.mkdir()
-    sessions = root.parent / "autonode_sessions"
+    (root / ".git").mkdir()
+    sessions = fake_src / "autonode_docker"
     for name, age in (("stale", 3.0), ("fresh", 0.1)):
         sess = sessions / name
         (sess / "workspace").mkdir(parents=True)
+        (sess / ".source_repo").write_text("myrepo", encoding="utf-8")
         _touch_dir_old(sess, age)
     return root
 
@@ -47,9 +52,11 @@ def test_cleanup_orphaned_worktrees_removes_only_stale(repo_with_sessions: Path)
         ) as rmtree:
             removed = provider.cleanup_orphaned_worktrees(str(repo_with_sessions), ttl_days=1)
 
-    stale = repo_with_sessions.parent / "autonode_sessions" / "stale"
+    stale = repo_with_sessions.parent / "autonode_docker" / "stale"
     assert str(stale) in removed
     assert len(removed) == 1
+    rmtree_paths = [c[0][0] for c in rmtree.call_args_list]
+    assert stale in rmtree_paths
     worktree_removes = [c for c in calls if c[0] == "run" and "remove" in c[1]]
     assert len(worktree_removes) >= 1
     assert any(str(stale) in str(cmd) for _, cmd in worktree_removes)
@@ -58,9 +65,16 @@ def test_cleanup_orphaned_worktrees_removes_only_stale(repo_with_sessions: Path)
     rmtree.assert_called()
 
 
-def test_cleanup_orphaned_worktrees_empty_root(tmp_path: Path) -> None:
-    repo = tmp_path / "empty"
+def test_cleanup_orphaned_worktrees_empty_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake_src = tmp_path / "src"
+    fake_src.mkdir()
+    monkeypatch.setattr("autonode.core.sandbox.session_paths.REPOS_ROOT", str(fake_src))
+    repo = fake_src / "empty"
     repo.mkdir()
+    (repo / ".git").mkdir()
     provider = GitWorktreeProvider()
     assert provider.cleanup_orphaned_worktrees(str(repo), ttl_days=1) == []
 

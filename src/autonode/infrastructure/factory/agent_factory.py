@@ -109,7 +109,7 @@ class LangChainAgentFactory(AgentFactoryPort):
     def tool_names_for_agent(self, agent_id: str) -> list[str]:
         config = self._catalog.get(agent_id)
         if not config:
-            raise ValueError(f"Agente '{agent_id}' non trovato nel catalogo.")
+            raise ValueError(f"Agent '{agent_id}' not found in the catalog.")
         return list(config.tools)
 
     def create_all(self) -> dict[str, Runnable[Any, Any]]:

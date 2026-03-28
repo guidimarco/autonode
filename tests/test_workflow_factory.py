@@ -15,18 +15,21 @@ from autonode.core.workflow.models import AgentWorkflowNodeModel
 from autonode.infrastructure.config.workflow_schema import WorkflowYamlSchema
 from autonode.infrastructure.tools.registry import ToolRegistry
 from tests.stubs.agent_factory import StubAgentFactory
+from tests.stubs.session_logger import make_test_session_logger
 from tests.stubs.vcs_provider import StubVcsProviderForCompileTests
+
+_COMPILE_SID = "550e8400-e29b-41d4-a716-446655440003"
 
 
 def _registry_for_compile(tmp_path: Path) -> ToolRegistry:
     repo = tmp_path / "repo"
     repo.mkdir()
     env = ExecutionEnvironmentModel(
-        session_id="compile-test",
+        session_id=_COMPILE_SID,
         sandbox_id="fixture-compile-only",
         repo_host_path=str(repo),
     )
-    return ToolRegistry(execution_env=env)
+    return ToolRegistry(execution_env=env, session_logger=make_test_session_logger())
 
 
 def _vcs_for_compile() -> StubVcsProviderForCompileTests:

@@ -1,12 +1,14 @@
-"""Autonode logger adapter backed by Python stdlib logging on stderr only."""
+"""Autonode logger adapter: stderr + file globale per errori di sistema."""
 
 from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 from typing import Any
 
 from autonode.core.logging import AutonodeLogger, LoggerFactory
+from autonode.core.sandbox.session_paths import REPOS_ROOT
 
 
 class StandardErrorAutonodeLogger(AutonodeLogger):
@@ -51,12 +53,28 @@ def create_stderr_autonode_logger(
 
 
 def install_autonode_process_logging(*, level: int = logging.INFO) -> None:
-    """Configure root logging to stderr only and register the Core ``LoggerFactory``."""
+    """
+    Configura logging su stderr, file globale ``{REPOS_ROOT}/autonode/autonode.log``
+    (WARNING+), e registra il Core ``LoggerFactory``.
+    """
     root = logging.getLogger()
     root.handlers.clear()
     root.setLevel(level)
-    handler = logging.StreamHandler(stream=sys.stderr)
-    handler.setLevel(level)
-    handler.setFormatter(logging.Formatter("%(asctime)s | %(levelname)s | %(message)s"))
-    root.addHandler(handler)
+    fmt = logging.Formatter("%(asctime)s | %(levelname)s | %(message)s")
+
+    stderr_h = logging.StreamHandler(stream=sys.stderr)
+    stderr_h.setLevel(level)
+    stderr_h.setFormatter(fmt)
+    root.addHandler(stderr_h)
+
+    app_dir = Path(REPOS_ROOT) / "autonode"
+    try:
+        app_dir.mkdir(parents=True, exist_ok=True)
+        global_h = logging.FileHandler(app_dir / "autonode.log", encoding="utf-8")
+        global_h.setLevel(logging.WARNING)
+        global_h.setFormatter(fmt)
+        root.addHandler(global_h)
+    except OSError:
+        pass
+
     LoggerFactory.set_logger(create_stderr_autonode_logger(level=level))

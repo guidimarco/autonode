@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -118,20 +119,27 @@ def test_provision_passes_llm_env_vars(
         WorkspaceBindingModel,
     )
 
+    sid = "550e8400-e29b-41d4-a716-446655440099"
     ws = WorkspaceBindingModel(
-        session_id="s1",
+        session_id=sid,
         repo_host_path=str(tmp_path),
-        branch_name="autonode/s1",
+        branch_name="autonode/session-x",
     )
-    adapter.provision_environment(ws)
+    py = logging.getLogger("test.docker_adapter.provision")
+    py.handlers.clear()
+    with patch.object(adapter, "_start_sandbox_log_thread"):
+        adapter.provision_environment(ws, session_python_logger=py)
 
     env = mock_docker_client.containers.run.call_args.kwargs.get("environment") or {}
     assert env.get("OPEN_ROUTER_API_KEY") == "sk-test"
     assert env.get("OPENAI_API_KEY") == "sk-openai"
     assert "ANTHROPIC_API_KEY" not in env
 
+    from autonode.core.sandbox.session_paths import session_outputs_path, session_workspace_path
+    from autonode.infrastructure.sandbox.host_bind_paths import host_bind_path_for_container_path
+
     vol = mock_docker_client.containers.run.call_args.kwargs.get("volumes") or {}
-    exp_wt = (tmp_path.parent / "autonode_sessions" / "s1" / "workspace").resolve()
-    exp_out = (tmp_path.parent / "autonode_sessions" / "s1" / "outputs").resolve()
-    assert vol[str(exp_wt)]["bind"] == CONTAINER_WORKSPACE_PATH
-    assert vol[str(exp_out)]["bind"] == CONTAINER_OUTPUTS_PATH
+    exp_wt = host_bind_path_for_container_path(session_workspace_path(sid))
+    exp_out = host_bind_path_for_container_path(session_outputs_path(sid))
+    assert vol[exp_wt]["bind"] == CONTAINER_WORKSPACE_PATH
+    assert vol[exp_out]["bind"] == CONTAINER_OUTPUTS_PATH

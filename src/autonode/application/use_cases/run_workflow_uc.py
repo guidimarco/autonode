@@ -1,6 +1,8 @@
+import logging
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
@@ -9,11 +11,13 @@ from autonode.application.workflow.builder import build_graph
 from autonode.application.workflow.state import make_initial_graph_state
 from autonode.core.agents.models import ReviewVerdictModel
 from autonode.core.agents.ports import AgentFactoryPort
+from autonode.core.logging import AutonodeLogger
 from autonode.core.sandbox.models import ExecutionEnvironmentModel
 from autonode.core.sandbox.ports import SandboxProviderPort
 from autonode.core.tools.ports import ToolRegistryPort
 from autonode.core.workflow.ports import VCSProviderPort
 from autonode.infrastructure.config.loader import load_workflow_config
+from autonode.infrastructure.persistence.session_status_store import write_session_status
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,6 +26,8 @@ class RunWorkflowUseCaseRequest:
     workflow_path: str
     agents_path: str
     repo_path: str
+    session_logger: AutonodeLogger
+    session_python_logger: logging.Logger
     thread_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
 
@@ -44,7 +50,9 @@ class RunWorkflowUseCase:
         self,
         vcs_provider: VCSProviderPort,
         sandbox_provider: SandboxProviderPort,
-        tool_registry_factory: Callable[[ExecutionEnvironmentModel], ToolRegistryPort],
+        tool_registry_factory: Callable[
+            [ExecutionEnvironmentModel, AutonodeLogger], ToolRegistryPort
+        ],
         agent_factory_provider: Callable[[str, ToolRegistryPort], AgentFactoryPort],
         checkpointer: BaseCheckpointSaver[Any],
     ):
@@ -59,8 +67,19 @@ class RunWorkflowUseCase:
         execution_env = None
         try:
             workspace = self.vcs.setup_session_worktree(request.thread_id, request.repo_path)
-            execution_env = self.sandbox.provision_environment(workspace)
-            registry = self.tool_registry_factory(execution_env)
+            write_session_status(
+                workspace.session_id,
+                {
+                    "status": "running",
+                    "repo_path": request.repo_path,
+                    "started_at": datetime.now(UTC).isoformat(),
+                },
+            )
+            execution_env = self.sandbox.provision_environment(
+                workspace,
+                session_python_logger=request.session_python_logger,
+            )
+            registry = self.tool_registry_factory(execution_env, request.session_logger)
             factory = self.agent_factory_provider(request.agents_path, registry)
 
             workflow = load_workflow_config(request.workflow_path)
@@ -86,6 +105,16 @@ class RunWorkflowUseCase:
 
             rv = final_state["review_verdict"]
             verdict_label = "approved" if rv.is_approved else "revision"
+            write_session_status(
+                workspace.session_id,
+                {
+                    "status": "completed",
+                    "verdict": verdict_label,
+                    "branch_name": workspace.branch_name,
+                    "iteration": final_state["iteration"],
+                    "finished_at": datetime.now(UTC).isoformat(),
+                },
+            )
             return RunWorkflowUseCaseResponse(
                 session_id=workspace.session_id,
                 branch_name=workspace.branch_name,
@@ -95,8 +124,19 @@ class RunWorkflowUseCase:
                 final_output=content,
                 last_commit_hash=final_state.get("last_commit_hash", ""),
             )
+        except Exception as exc:
+            sid = workspace.session_id if workspace is not None else request.thread_id
+            write_session_status(
+                sid,
+                {
+                    "status": "failed",
+                    "error": str(exc),
+                    "finished_at": datetime.now(UTC).isoformat(),
+                },
+            )
+            raise
         finally:
             if execution_env is not None:
                 self.sandbox.release_environment(execution_env)
             if workspace is not None:
-                self.vcs.remove_session_worktree(request.repo_path, workspace.session_id)
+                self.vcs.remove_session_worktree(workspace.session_id, request.repo_path)

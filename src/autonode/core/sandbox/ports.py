@@ -2,6 +2,7 @@
 Core sandbox ports.
 """
 
+import logging
 from abc import ABC, abstractmethod
 
 from autonode.core.sandbox.models import ExecutionEnvironmentModel, WorkspaceBindingModel
@@ -11,7 +12,12 @@ class SandboxProviderPort(ABC):
     """Abstract runtime sandbox provider."""
 
     @abstractmethod
-    def provision_environment(self, workspace: WorkspaceBindingModel) -> ExecutionEnvironmentModel:
+    def provision_environment(
+        self,
+        workspace: WorkspaceBindingModel,
+        *,
+        session_python_logger: logging.Logger,
+    ) -> ExecutionEnvironmentModel:
         """Provision/resolve runtime and return a session execution environment."""
 
     @abstractmethod

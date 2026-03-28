@@ -9,8 +9,10 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from docker.client import DockerClient
 
@@ -23,6 +25,7 @@ from autonode.core.sandbox.models import (
     WorkspaceBindingModel,
 )
 from autonode.core.sandbox.ports import SandboxProviderPort
+from autonode.infrastructure.sandbox.host_bind_paths import host_bind_path_for_container_path
 from docker import errors as docker_errors  # type: ignore[attr-defined]
 
 logger = logging.getLogger(__name__)
@@ -61,8 +64,45 @@ class DockerAdapter(SandboxProviderPort):
         self._image = image
         self._startup_command = startup_command or ["sleep", "infinity"]
         self._client: DockerClient = docker.from_env()  # type: ignore[attr-defined]
+        self._sandbox_log_threads: dict[str, threading.Thread] = {}
         if prepare_image:
             self._ensure_sandbox_image(force_rebuild=force_rebuild)
+
+    @staticmethod
+    def _forward_sandbox_container_logs(
+        container: Any, session_python_logger: logging.Logger
+    ) -> None:
+        """Legge lo stream Docker (stdout/stderr) e lo appende al ``logging.Logger`` di sessione."""
+        try:
+            logs = container.logs
+            for chunk in logs(stream=True, follow=True):
+                if not chunk:
+                    continue
+                text = (
+                    chunk.decode("utf-8", errors="replace")
+                    if isinstance(chunk, bytes)
+                    else str(chunk)
+                )
+                for line in text.splitlines():
+                    if line:
+                        session_python_logger.info("[sandbox] %s", line)
+        except Exception:
+            logger.debug("Stream log sandbox terminato", exc_info=True)
+
+    def _start_sandbox_log_thread(
+        self,
+        container: Any,
+        session_id: str,
+        session_python_logger: logging.Logger,
+    ) -> None:
+        t = threading.Thread(
+            target=self._forward_sandbox_container_logs,
+            args=(container, session_python_logger),
+            daemon=True,
+            name=f"autonode-sandbox-logs-{session_id}",
+        )
+        self._sandbox_log_threads[session_id] = t
+        t.start()
 
     def _ensure_sandbox_image(self, *, force_rebuild: bool) -> None:
         if not force_rebuild:
@@ -110,7 +150,12 @@ class DockerAdapter(SandboxProviderPort):
                 f"Impossibile preparare l'ambiente sandbox Docker (errore API Docker): {e}",
             )
 
-    def provision_environment(self, workspace: WorkspaceBindingModel) -> ExecutionEnvironmentModel:
+    def provision_environment(
+        self,
+        workspace: WorkspaceBindingModel,
+        *,
+        session_python_logger: logging.Logger,
+    ) -> ExecutionEnvironmentModel:
         env = _host_env_for_container()
         container = self._client.containers.run(
             self._image,
@@ -122,10 +167,18 @@ class DockerAdapter(SandboxProviderPort):
             working_dir=CONTAINER_WORKSPACE_PATH,
             environment=env,
             volumes={
-                workspace.worktree_host_path: {"bind": CONTAINER_WORKSPACE_PATH, "mode": "rw"},
-                workspace.outputs_host_path: {"bind": CONTAINER_OUTPUTS_PATH, "mode": "rw"},
+                host_bind_path_for_container_path(workspace.worktree_host_path): {
+                    "bind": CONTAINER_WORKSPACE_PATH,
+                    "mode": "rw",
+                },
+                host_bind_path_for_container_path(workspace.outputs_host_path): {
+                    "bind": CONTAINER_OUTPUTS_PATH,
+                    "mode": "rw",
+                },
             },
         )
+
+        self._start_sandbox_log_thread(container, workspace.session_id, session_python_logger)
 
         return ExecutionEnvironmentModel(
             session_id=workspace.session_id,
@@ -137,12 +190,20 @@ class DockerAdapter(SandboxProviderPort):
         if not environment.sandbox_id or environment.sandbox_id == "host-runtime":
             return
 
+        sid = environment.session_id
         try:
             container = self._client.containers.get(environment.sandbox_id)
         except docker_errors.NotFound:
+            self._join_sandbox_log_thread(sid)
             return
 
         container.remove(force=True)
+        self._join_sandbox_log_thread(sid)
+
+    def _join_sandbox_log_thread(self, session_id: str) -> None:
+        t = self._sandbox_log_threads.pop(session_id, None)
+        if t is not None and t.is_alive():
+            t.join(timeout=15.0)
 
     def list_active_sandboxes(self) -> list[str]:
         """Return names of containers whose name starts with ``autonode-sandbox-``."""

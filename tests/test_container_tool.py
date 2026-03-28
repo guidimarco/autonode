@@ -8,6 +8,7 @@ import pytest
 
 from autonode.core.sandbox.models import ExecutionEnvironmentModel
 from autonode.infrastructure.tools.container_tool import docker_exec
+from tests.stubs.session_logger import make_test_session_logger
 
 
 @pytest.fixture
@@ -28,7 +29,11 @@ def test_docker_exec_uses_bash_workdir_and_demux(exec_env: ExecutionEnvironmentM
     with patch(
         "autonode.infrastructure.tools.container_tool.docker.from_env", return_value=mock_client
     ):
-        r = docker_exec(exec_env, ["/bin/bash", "-lc", "echo hi"])
+        r = docker_exec(
+            exec_env,
+            ["/bin/bash", "-lc", "echo hi"],
+            session_logger=make_test_session_logger(),
+        )
 
     mock_client.containers.get.assert_called_once_with("cid")
     mock_container.exec_run.assert_called_once()

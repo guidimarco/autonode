@@ -21,8 +21,8 @@ class VCSProviderPort(ABC):
         """Return commit hash (or empty string if nothing to commit)."""
 
     @abstractmethod
-    def remove_session_worktree(self, repo_path: str, session_id: str) -> None:
-        """Remove session worktree."""
+    def remove_session_worktree(self, session_id: str, repo_path: str) -> None:
+        """Rimuove il worktree Git (cartella ``workspace``); ``repo_path`` identifica il repo."""
 
     @abstractmethod
     def remove_all_session_worktrees(self, repo_path: str) -> None:

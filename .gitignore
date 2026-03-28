@@ -10,7 +10,7 @@ __pycache__/
 .cursor/
 _meta/
 config/
-.autonode/
+autonode.log
 
 # App Runtime
 .venv/

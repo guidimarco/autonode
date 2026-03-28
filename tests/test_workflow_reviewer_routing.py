@@ -13,18 +13,21 @@ from autonode.core.sandbox.models import ExecutionEnvironmentModel, WorkspaceBin
 from autonode.core.workflow import WorkflowModel
 from autonode.infrastructure.tools.registry import ToolRegistry
 from tests.stubs.agent_factory import StubAgentFactory
+from tests.stubs.session_logger import make_test_session_logger
 from tests.stubs.vcs_provider import StubVcsProviderForCompileTests
+
+_ROUTING_SID = "550e8400-e29b-41d4-a716-446655440004"
 
 
 def _registry(tmp_path: Path) -> ToolRegistry:
     repo = tmp_path / "repo"
     repo.mkdir()
     env = ExecutionEnvironmentModel(
-        session_id="routing-test",
-        sandbox_id="routing-test",
+        session_id=_ROUTING_SID,
+        sandbox_id=_ROUTING_SID,
         repo_host_path=str(repo),
     )
-    return ToolRegistry(execution_env=env)
+    return ToolRegistry(execution_env=env, session_logger=make_test_session_logger())
 
 
 def test_graph_invoke_reviewer_structured_approval_ends(
@@ -49,13 +52,13 @@ def test_graph_invoke_reviewer_structured_approval_ends(
     repo = tmp_path / "repo"
     repo.mkdir(exist_ok=True)
     workspace = WorkspaceBindingModel(
-        session_id="routing-test",
+        session_id=_ROUTING_SID,
         repo_host_path=str(repo),
         branch_name="autonode/session-routing-test",
     )
     execution_env = ExecutionEnvironmentModel(
-        session_id="routing-test",
-        sandbox_id="routing-test",
+        session_id=_ROUTING_SID,
+        sandbox_id=_ROUTING_SID,
         repo_host_path=str(repo),
     )
     initial = make_initial_graph_state(
@@ -65,7 +68,7 @@ def test_graph_invoke_reviewer_structured_approval_ends(
     )
     final = graph.invoke(
         initial,
-        config={"configurable": {"thread_id": "routing-test"}},
+        config={"configurable": {"thread_id": _ROUTING_SID}},
     )
     assert final["review_verdict"].is_approved is True
     assert final["review_verdict"].feedback == "LGTM"

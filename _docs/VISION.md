@@ -64,7 +64,7 @@ Il runtime multi-agente è **centralizzato** e raggiungibile da più canali, con
 
 ### Strategia locale per sessione
 
-- Per ogni sessione (`session_id` / `thread_id`) il runtime usa una directory host deterministica `../autonode_sessions/<session_id>/` (sibling della root del repo) con sottocartelle `workspace/` (Git worktree) e `outputs/`; nel container sandbox sono montate come `/workspace` e `/outputs`.
+- Per ogni sessione (`session_id` / `thread_id`) il runtime usa una directory operativa sotto `{REPOS_ROOT}/autonode_docker/<session_id>/` con sottocartelle `workspace/` (Git worktree) e `outputs/`; nel container sandbox sono montate come `/workspace` e `/outputs`. Log e stato persistono sotto `DATA_ROOT/<session_id>/` (nessun mount verso la sandbox).
 - I commit **non** avvengono sul branch di default (es. `main`/`master`): il lavoro avviene su un **branch di sessione** locale con naming stabile, es. `autonode/session-<token>`, creato tramite `VCSProviderPort` (`GitWorktreeProvider` in infrastructure).
 - I nodi `vcs_sync` del grafo eseguono **solo commit locali** nel worktree (nessun push verso `origin` o altri remote).
 - A **fine run** (successo o errore), il **container Docker** della sessione viene rimosso e la **directory del worktree** viene eliminata con `git worktree remove --force` (eventuale fallback filesystem); il **branch locale di sessione resta nel repository principale** così le modifiche restano consultabili e mergeabili a mano.
