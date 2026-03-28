@@ -54,22 +54,22 @@ def test_resolve_under_root_blocks_traversal_via_nested_dotdot(tmp_path: Path) -
 
 
 def test_path_guard_rejects_host_runtime(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
     env = ExecutionEnvironmentModel(
         session_id="s",
         sandbox_id="host-runtime",
-        worktree_host_path=str(tmp_path),
-        container_workspace_path="/workspace",
+        repo_host_path=str(repo),
     )
     with pytest.raises(ValueError, match="host-runtime"):
         PathGuard(env)
 
 
-def test_path_guard_rejects_empty_worktree() -> None:
+def test_path_guard_rejects_empty_repo() -> None:
     env = ExecutionEnvironmentModel(
         session_id="s",
         sandbox_id="container-id",
-        worktree_host_path="   ",
-        container_workspace_path="/workspace",
+        repo_host_path="   ",
     )
     with pytest.raises(ValueError, match="obbligatorio"):
         PathGuard(env)

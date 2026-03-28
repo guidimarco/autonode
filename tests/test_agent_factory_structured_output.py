@@ -31,13 +31,12 @@ agents:
 
 
 def _registry(tmp_path: Path) -> ToolRegistry:
-    root = tmp_path / "sandbox"
-    root.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
     env = ExecutionEnvironmentModel(
         session_id="factory-structured-test",
         sandbox_id="factory-structured-test",
-        worktree_host_path=str(root),
-        container_workspace_path="/workspace",
+        repo_host_path=str(repo),
     )
     return ToolRegistry(execution_env=env)
 

@@ -4,15 +4,23 @@ services:
   autonode:
     build: .
     user: "${CURRENT_UID}:${CURRENT_GID}"
+    group_add:
+      - "${DOCKER_GID}"
     container_name: autonode
     restart: always
     env_file:
       - .env
+    environment:
+      - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME}
+      - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL}
+      - GIT_COMMITTER_NAME=${GIT_AUTHOR_NAME}
+      - GIT_COMMITTER_EMAIL=${GIT_AUTHOR_EMAIL}
     volumes:
       - .:/app
-      # DB and outputs
+      - ../autonode_sessions:/autonode_sessions
+      # ^ ^ ^ Session folder for worktree and outputs
       - ./.autonode/db:/app/.autonode/db
-      - ./.autonode/outputs:/app/.autonode/outputs
+      # ^ ^ ^ Checkpoint manager (SQLite)
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - 8000:8000
@@ -20,13 +28,13 @@ services:
       - autonode-network
 
   appsmith:
-    image: index.docker.io/appsmith/appsmith-ce
+    image: index.docker.io/appsmith/appsmith-ce:latest
     container_name: appsmith
     restart: always
     ports:
       - 8080:80
     volumes:
-      - ./.autonode/appsmith:/appsmith-stack
+      - ./.autonode/appsmith:/appsmith-stacks
     networks:
       - autonode-network
 

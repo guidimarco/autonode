@@ -1,4 +1,4 @@
-"""Tests for session worktree cleanup under .autonode/worktrees/."""
+"""Tests for session cleanup under ../autonode_sessions/."""
 
 from __future__ import annotations
 
@@ -13,21 +13,24 @@ from autonode.infrastructure.vcs.git_worktree_provider import GitWorktreeProvide
 
 
 def _touch_dir_old(path: Path, days_ago: float) -> None:
-    path.mkdir(parents=True)
+    path.mkdir(parents=True, exist_ok=True)
     old = time.time() - days_ago * 86400
     os.utime(path, (old, old))
 
 
 @pytest.fixture
-def repo_with_worktrees(tmp_path: Path) -> Path:
+def repo_with_sessions(tmp_path: Path) -> Path:
     root = tmp_path / "repo"
-    wt_root = root / ".autonode" / "worktrees"
-    _touch_dir_old(wt_root / "stale", 3.0)
-    _touch_dir_old(wt_root / "fresh", 0.1)
+    root.mkdir()
+    sessions = root.parent / "autonode_sessions"
+    for name, age in (("stale", 3.0), ("fresh", 0.1)):
+        sess = sessions / name
+        (sess / "workspace").mkdir(parents=True)
+        _touch_dir_old(sess, age)
     return root
 
 
-def test_cleanup_orphaned_worktrees_removes_only_stale(repo_with_worktrees: Path) -> None:
+def test_cleanup_orphaned_worktrees_removes_only_stale(repo_with_sessions: Path) -> None:
     calls: list[tuple[str, tuple[str, ...]]] = []
 
     def fake_run(cmd: list[str], **kwargs: object) -> MagicMock:
@@ -42,9 +45,9 @@ def test_cleanup_orphaned_worktrees_removes_only_stale(repo_with_worktrees: Path
         with patch(
             "autonode.infrastructure.vcs.git_worktree_provider.shutil.rmtree",
         ) as rmtree:
-            removed = provider.cleanup_orphaned_worktrees(str(repo_with_worktrees), ttl_days=1)
+            removed = provider.cleanup_orphaned_worktrees(str(repo_with_sessions), ttl_days=1)
 
-    stale = repo_with_worktrees / ".autonode" / "worktrees" / "stale"
+    stale = repo_with_sessions.parent / "autonode_sessions" / "stale"
     assert str(stale) in removed
     assert len(removed) == 1
     worktree_removes = [c for c in calls if c[0] == "run" and "remove" in c[1]]
@@ -62,7 +65,7 @@ def test_cleanup_orphaned_worktrees_empty_root(tmp_path: Path) -> None:
     assert provider.cleanup_orphaned_worktrees(str(repo), ttl_days=1) == []
 
 
-def test_remove_all_session_worktrees(repo_with_worktrees: Path) -> None:
+def test_remove_all_session_worktrees(repo_with_sessions: Path) -> None:
     calls: list[tuple[str, tuple[str, ...]]] = []
 
     def fake_run(cmd: list[str], **kwargs: object) -> MagicMock:
@@ -75,7 +78,7 @@ def test_remove_all_session_worktrees(repo_with_worktrees: Path) -> None:
         side_effect=fake_run,
     ):
         with patch("autonode.infrastructure.vcs.git_worktree_provider.shutil.rmtree"):
-            provider.remove_all_session_worktrees(str(repo_with_worktrees))
+            provider.remove_all_session_worktrees(str(repo_with_sessions))
 
     prunes = [c for c in calls if c[0] == "run" and "prune" in c[1]]
     assert len(prunes) == 1

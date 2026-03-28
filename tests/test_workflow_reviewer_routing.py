@@ -17,13 +17,12 @@ from tests.stubs.vcs_provider import StubVcsProviderForCompileTests
 
 
 def _registry(tmp_path: Path) -> ToolRegistry:
-    root = tmp_path / "sandbox"
-    root.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
     env = ExecutionEnvironmentModel(
         session_id="routing-test",
         sandbox_id="routing-test",
-        worktree_host_path=str(root),
-        container_workspace_path="/workspace",
+        repo_host_path=str(repo),
     )
     return ToolRegistry(execution_env=env)
 
@@ -47,19 +46,17 @@ def test_graph_invoke_reviewer_structured_approval_ends(
         checkpointer=InMemorySaver(),
         vcs_provider=StubVcsProviderForCompileTests(),
     )
-    sandbox_root = tmp_path / "sandbox"
-    sandbox_root.mkdir(exist_ok=True)
+    repo = tmp_path / "repo"
+    repo.mkdir(exist_ok=True)
     workspace = WorkspaceBindingModel(
         session_id="routing-test",
-        repo_host_path=str(tmp_path),
-        worktree_host_path=str(sandbox_root),
+        repo_host_path=str(repo),
         branch_name="autonode/session-routing-test",
     )
     execution_env = ExecutionEnvironmentModel(
         session_id="routing-test",
         sandbox_id="routing-test",
-        worktree_host_path=str(sandbox_root),
-        container_workspace_path="/workspace",
+        repo_host_path=str(repo),
     )
     initial = make_initial_graph_state(
         "task",

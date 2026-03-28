@@ -23,7 +23,6 @@ def workspace_binding() -> WorkspaceBindingModel:
     return WorkspaceBindingModel(
         session_id="sid-1",
         repo_host_path="/repo",
-        worktree_host_path="/repo/.autonode/worktrees/sid-1",
         branch_name="autonode/session-sid-1",
     )
 
@@ -33,8 +32,7 @@ def execution_env(workspace_binding: WorkspaceBindingModel) -> ExecutionEnvironm
     return ExecutionEnvironmentModel(
         session_id=workspace_binding.session_id,
         sandbox_id="container-abc",
-        worktree_host_path=workspace_binding.worktree_host_path,
-        container_workspace_path="/workspace",
+        repo_host_path=workspace_binding.repo_host_path,
     )
 
 

@@ -19,9 +19,7 @@ COPY . .
 
 ENV PYTHONPATH=/app/src
 
-RUN git config --global user.name "Marco Guidi" && \
-    git config --global user.email "mark.88g@gmail.com" && \
-    git config --global --add safe.directory /app
+RUN git config --global --add safe.directory /app
 
 EXPOSE 8000
 

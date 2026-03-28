@@ -48,8 +48,11 @@ def test_workflow_cli_passes_args_to_run_workflow(tmp_path: Path) -> None:
     assert captured.get("prompt") == prompt
 
 
-def test_main_routes_cleanup_to_cleanup_cli() -> None:
+def test_main_routes_cleanup_to_cleanup_cli(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Verifica che `main()` chiami il ramo cleanup quando il primo arg è 'cleanup'."""
+    monkeypatch.setenv("AUTONODE_DB_PATH", str(tmp_path / "autonode.db"))
     with patch("autonode.presentation.cli._run_cleanup_cli") as mock_cleanup:
         with patch.object(sys, "argv", ["autonode", "cleanup"]):
             from autonode.presentation.cli import main
@@ -58,8 +61,11 @@ def test_main_routes_cleanup_to_cleanup_cli() -> None:
     mock_cleanup.assert_called_once()
 
 
-def test_main_routes_mcp_arg_to_workflow_cli() -> None:
+def test_main_routes_mcp_arg_to_workflow_cli(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Il CLI attuale non espone un sottocomando MCP; per default passa agli argomenti workflow."""
+    monkeypatch.setenv("AUTONODE_DB_PATH", str(tmp_path / "autonode.db"))
     with patch("autonode.presentation.cli._run_workflow_cli") as mock_workflow:
         with patch.object(sys, "argv", ["autonode", "mcp"]):
             from autonode.presentation.cli import main
@@ -69,8 +75,11 @@ def test_main_routes_mcp_arg_to_workflow_cli() -> None:
     assert mock_workflow.call_args[0][1] == ["mcp"]
 
 
-def test_main_routes_workflow_with_full_argv() -> None:
+def test_main_routes_workflow_with_full_argv(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """Verifica che `main()` passi sys.argv[1:] (non [2:]) al workflow handler."""
+    monkeypatch.setenv("AUTONODE_DB_PATH", str(tmp_path / "autonode.db"))
     captured_args: list[list[str]] = []
 
     def fake_workflow_cli(_container: object, args: list[str]) -> None:

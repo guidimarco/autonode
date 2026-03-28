@@ -119,17 +119,17 @@ Flusso:
 
 ## Stato corrente degli entrypoint
 
-- `presentation/cli.py`: entrypoint operativo. Sottocomando `cleanup` per worktree sotto `.autonode/worktrees/` e container `autonode-sandbox-*`. Sottocomando `mcp` per avviare il server MCP su stdio. Sottocomando default per eseguire un workflow.
+- `presentation/cli.py`: entrypoint operativo. Sottocomando `cleanup` per sessioni sotto `../autonode_sessions/<session_id>/` e container `autonode-sandbox-*`. Sottocomando `mcp` per avviare il server MCP su stdio. Sottocomando default per eseguire un workflow.
 - `presentation/api.py`: gateway HTTP minimale (FastAPI) con `POST /execute` protetto da `X-API-Key` (`AUTONODE_API_KEY`), che invoca lo stesso handler workflow.
-- Dopo ogni run workflow, `RunWorkflowUseCase` rimuove in `finally` il container sandbox e il worktree di sessione; il **branch locale** `autonode/session-*` resta nel repo (nessun `git push` nel flusso standard).
+- Dopo ogni run workflow, `RunWorkflowUseCase` rimuove in `finally` il container sandbox e la cartella sessione (`../autonode_sessions/<session_id>/`); il **branch locale** `autonode/session-*` resta nel repo (nessun `git push` nel flusso standard).
 - `RunWorkflowUseCase` usa checkpoint persistente SQLite (`autonode.db` in root progetto) come default quando non viene iniettato un checkpointer esterno; la continuità di stato è legata al `thread_id`.
 - Hardening security:
   - `thread_id` è generato e quindi controllato server-side (UUID4) in `presentation/api.py` e nei handler di workflow; i client non possono fissare l'id di persistenza.
-  - Le worktree directory su host non dipendono dal `thread_id`: `infrastructure/vcs/git_worktree_provider.py` usa un UUID4 interno per il path e una marker file per mappare la sessione.
+  - Le directory sessione su host sono deterministiche: `../autonode_sessions/<session_id>/workspace` (worktree Git) e `outputs/`; il `session_id` del workflow coincide con la cartella sessione.
   - Validazione path delle config: `presentation/workflow/models.py` permette `workflow_path`/`agents_path` solo sotto cartelle `config/` (project o repo target).
-  - Sandbox shell: `infrastructure/tools/path_guard.py` applica `.resolve()` sui path (convalidazione contro escape via symlink).
+  - Sandbox shell: `container_tool.docker_exec` usa `docker-py` `exec_run` con `/bin/bash -lc` e `workdir` `/workspace`; `path_guard` limita i path host al worktree e agli output sessione.
   - Error handling API: in `presentation/api.py` il `500` non espone mai dettagli dell'eccezione al client.
-- `infrastructure/vcs/git_worktree_provider.py`: provisioning worktree, commit locale (`commit_changes`), rimozione worktree per sessione / globale, branch `autonode/session-*`, e `cleanup_orphaned_worktrees` (TTL) usato dal `cleanup --prune` della CLI.
+- `infrastructure/vcs/git_worktree_provider.py`: provisioning worktree sotto `../autonode_sessions/<session_id>/workspace`, commit locale (`commit_changes`), rimozione sessione / globale, branch `autonode/session-*`, e `cleanup_orphaned_worktrees` (TTL) usato dal `cleanup --prune` della CLI.
 - MCP (stdio): presente in `presentation/mcp/`; tool `run_workflow` invoca `presentation/workflow/handlers.run_workflow` con logging su stderr e isolamento temporaneo di fd stdout durante l’esecuzione. Path YAML di default: `config/workflow.yaml` e `config/agents.yaml` relativi alla root del repository (risolti da `Path(__file__)` in `server.py`). API HTTP remote: non presenti nel codice corrente.
 
 ---

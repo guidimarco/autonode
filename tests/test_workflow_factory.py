@@ -19,13 +19,12 @@ from tests.stubs.vcs_provider import StubVcsProviderForCompileTests
 
 
 def _registry_for_compile(tmp_path: Path) -> ToolRegistry:
-    root = tmp_path / "sandbox"
-    root.mkdir()
+    repo = tmp_path / "repo"
+    repo.mkdir()
     env = ExecutionEnvironmentModel(
         session_id="compile-test",
         sandbox_id="fixture-compile-only",
-        worktree_host_path=str(root),
-        container_workspace_path="/workspace",
+        repo_host_path=str(repo),
     )
     return ToolRegistry(execution_env=env)
 

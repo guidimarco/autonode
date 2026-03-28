@@ -23,11 +23,12 @@ def test_resolve_aider_model_default_when_unset(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_tool_registry_rejects_host_runtime(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
     env = ExecutionEnvironmentModel(
         session_id="s",
         sandbox_id="host-runtime",
-        worktree_host_path=str(tmp_path),
-        container_workspace_path=str(tmp_path),
+        repo_host_path=str(repo),
     )
     with pytest.raises(ValueError, match="host"):
         ToolRegistry(execution_env=env)
@@ -59,11 +60,12 @@ def test_registry_exposes_expected_tools(tmp_path: Path, monkeypatch: pytest.Mon
         lambda *_a, **_k: [],
     )
 
+    repo = tmp_path / "repo"
+    repo.mkdir()
     env = ExecutionEnvironmentModel(
         session_id="s",
         sandbox_id="sandbox-1",
-        worktree_host_path=str(tmp_path),
-        container_workspace_path="/workspace",
+        repo_host_path=str(repo),
     )
     registry = ToolRegistry(execution_env=env)
     available = registry.list_available_tools()

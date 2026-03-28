@@ -16,7 +16,12 @@ from docker.client import DockerClient
 
 import docker
 from autonode.core.sandbox.exceptions import SandboxImageNotFoundError
-from autonode.core.sandbox.models import ExecutionEnvironmentModel, WorkspaceBindingModel
+from autonode.core.sandbox.models import (
+    CONTAINER_OUTPUTS_PATH,
+    CONTAINER_WORKSPACE_PATH,
+    ExecutionEnvironmentModel,
+    WorkspaceBindingModel,
+)
 from autonode.core.sandbox.ports import SandboxProviderPort
 from docker import errors as docker_errors  # type: ignore[attr-defined]
 
@@ -49,13 +54,11 @@ class DockerAdapter(SandboxProviderPort):
         self,
         *,
         image: str = SANDBOX_IMAGE_TAG,
-        container_workspace_path: str = "/workspace",
         startup_command: list[str] | None = None,
         prepare_image: bool = True,
         force_rebuild: bool = False,
     ) -> None:
         self._image = image
-        self._container_workspace_path = container_workspace_path
         self._startup_command = startup_command or ["sleep", "infinity"]
         self._client: DockerClient = docker.from_env()  # type: ignore[attr-defined]
         if prepare_image:
@@ -114,22 +117,20 @@ class DockerAdapter(SandboxProviderPort):
             command=self._startup_command,
             detach=True,
             tty=True,
+            auto_remove=True,
             name=f"{SANDBOX_CONTAINER_PREFIX}{workspace.session_id}",
-            working_dir=self._container_workspace_path,
+            working_dir=CONTAINER_WORKSPACE_PATH,
             environment=env,
             volumes={
-                workspace.worktree_host_path: {
-                    "bind": self._container_workspace_path,
-                    "mode": "rw",
-                }
+                workspace.worktree_host_path: {"bind": CONTAINER_WORKSPACE_PATH, "mode": "rw"},
+                workspace.outputs_host_path: {"bind": CONTAINER_OUTPUTS_PATH, "mode": "rw"},
             },
         )
 
         return ExecutionEnvironmentModel(
             session_id=workspace.session_id,
             sandbox_id=str(container.id),
-            worktree_host_path=workspace.worktree_host_path,
-            container_workspace_path=self._container_workspace_path,
+            repo_host_path=workspace.repo_host_path,
         )
 
     def release_environment(self, environment: ExecutionEnvironmentModel) -> None:

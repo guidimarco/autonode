@@ -4,13 +4,28 @@ Container shell tool helpers.
 
 from __future__ import annotations
 
-import subprocess
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
+from dataclasses import dataclass
+from typing import cast
 
+from docker.client import DockerClient
 from langchain_core.tools import BaseTool, tool
 
+import docker
 from autonode.core.logging import LoggerFactory
-from autonode.core.sandbox.models import ExecutionEnvironmentModel
+from autonode.core.sandbox.models import (
+    CONTAINER_WORKSPACE_PATH,
+    ExecutionEnvironmentModel,
+)
 from autonode.infrastructure.tools.path_guard import PathGuard
+
+
+@dataclass(frozen=True, slots=True)
+class DockerExecResult:
+    stdout: str
+    stderr: str
+    exit_code: int
 
 
 def docker_exec(
@@ -19,24 +34,40 @@ def docker_exec(
     *,
     env_vars: dict[str, str] | None = None,
     timeout: int | None = None,
-) -> subprocess.CompletedProcess[str]:
-    env_args: list[str] = []
-    for key, value in (env_vars or {}).items():
-        env_args.extend(["-e", f"{key}={value}"])
-    return subprocess.run(
-        [
-            "docker",
-            "exec",
-            *env_args,
-            "-w",
-            environment.container_workspace_path,
-            environment.sandbox_id,
-            *command,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-    )
+) -> DockerExecResult:
+    client: DockerClient = docker.from_env()  # type: ignore[attr-defined]
+    container = client.containers.get(environment.sandbox_id)
+    effective_timeout = 60 if timeout is None else timeout
+
+    def _run() -> tuple[int, tuple[bytes, bytes] | None]:
+        return cast(
+            tuple[int, tuple[bytes, bytes] | None],
+            container.exec_run(
+                cmd=command,
+                workdir=CONTAINER_WORKSPACE_PATH,
+                environment=env_vars or {},
+                demux=True,
+            ),
+        )
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        future = pool.submit(_run)
+        try:
+            exit_code, streams = future.result(timeout=effective_timeout)
+        except FutureTimeout:
+            LoggerFactory.get_logger().warning(
+                "[DOCKER_EXEC] > timeout (%ss) superato.",
+                effective_timeout,
+            )
+            raise TimeoutError(f"timeout ({effective_timeout}s) superato") from None
+
+    if streams is None:
+        stdout_b, stderr_b = b"", b""
+    else:
+        stdout_b, stderr_b = streams
+    stdout = (stdout_b or b"").decode(errors="replace")
+    stderr = (stderr_b or b"").decode(errors="replace")
+    return DockerExecResult(stdout=stdout, stderr=stderr, exit_code=exit_code)
 
 
 def _log_stream_lines(prefix: str, content: str) -> None:
@@ -68,17 +99,20 @@ def make_container_shell_tool(
             return f"ERRORE: {e}"
 
         try:
-            result = docker_exec(environment, ["sh", "-lc", command], timeout=60)
+            result = docker_exec(
+                environment,
+                ["/bin/bash", "-lc", command],
+                timeout=60,
+            )
             return compose_output_and_mirror(
                 stdout=result.stdout,
                 stderr=result.stderr,
                 prefix="[DOCKER_EXEC] > ",
             )
-        except subprocess.TimeoutExpired:
-            LoggerFactory.get_logger().warning("[DOCKER_EXEC] > timeout (60s) superato.")
+        except TimeoutError:
             return "ERRORE: timeout (60s) superato."
         except Exception as e:
-            LoggerFactory.get_logger().exception("[DOCKER_EXEC] > errore subprocess shell: %s", e)
+            LoggerFactory.get_logger().exception("[DOCKER_EXEC] > errore exec shell: %s", e)
             return f"ERRORE: {e}"
 
     return shell

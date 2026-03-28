@@ -112,12 +112,15 @@ def test_provision_passes_llm_env_vars(
     container_mock.id = "abc123"
     mock_docker_client.containers.run.return_value = container_mock
 
-    from autonode.core.sandbox.models import WorkspaceBindingModel
+    from autonode.core.sandbox.models import (
+        CONTAINER_OUTPUTS_PATH,
+        CONTAINER_WORKSPACE_PATH,
+        WorkspaceBindingModel,
+    )
 
     ws = WorkspaceBindingModel(
         session_id="s1",
         repo_host_path=str(tmp_path),
-        worktree_host_path=str(tmp_path),
         branch_name="autonode/s1",
     )
     adapter.provision_environment(ws)
@@ -126,3 +129,9 @@ def test_provision_passes_llm_env_vars(
     assert env.get("OPEN_ROUTER_API_KEY") == "sk-test"
     assert env.get("OPENAI_API_KEY") == "sk-openai"
     assert "ANTHROPIC_API_KEY" not in env
+
+    vol = mock_docker_client.containers.run.call_args.kwargs.get("volumes") or {}
+    exp_wt = (tmp_path.parent / "autonode_sessions" / "s1" / "workspace").resolve()
+    exp_out = (tmp_path.parent / "autonode_sessions" / "s1" / "outputs").resolve()
+    assert vol[str(exp_wt)]["bind"] == CONTAINER_WORKSPACE_PATH
+    assert vol[str(exp_out)]["bind"] == CONTAINER_OUTPUTS_PATH
