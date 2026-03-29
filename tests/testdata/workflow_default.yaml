@@ -1,0 +1,9 @@
+# Test fixture: factory selector only; topology is Python-side.
+version: 2
+factory: dev_review_loop
+max_iterations: 10
+token_budget: 500000
+agents_path: config/agents.yaml
+params:
+  reviewer_structured: true
+  commit_after_dev: true

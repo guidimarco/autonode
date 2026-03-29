@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import threading
 from typing import TYPE_CHECKING
 
 from autonode.bootstrap import AppContainer
@@ -15,27 +14,15 @@ log = LoggerFactory.get_logger()
 
 def run_server(container: AppContainer, port: int, host: str, log_level: int) -> None:
     """
-    Run the server:
-    - FastAPI
-    - MCP stdio
+    Run the FastAPI app (uvicorn). Logging must be configured by the entrypoint
+    (e.g. ``install_autonode_process_logging`` in ``__main__``).
     """
     import uvicorn
 
     from autonode.presentation.api import app
-    from autonode.presentation.mcp.server import run_mcp_server
-    from autonode.presentation.mcp.stdio_safe import configure_mcp_stdio_logging
 
     app.state.container = container
-    configure_mcp_stdio_logging(level=log_level)
 
-    # --- MCP stdio ---
-    mcp_thread = threading.Thread(
-        target=run_mcp_server,
-        kwargs={"container": container, "log_level": log_level},
-        daemon=True,
-    )
-
-    # --- Uvicorn for FastAPI ---
     config = uvicorn.Config(
         app,
         host=host,
@@ -47,14 +34,8 @@ def run_server(container: AppContainer, port: int, host: str, log_level: int) ->
     server = uvicorn.Server(config)
 
     try:
-        # --- Start MCP ---
-        mcp_thread.start()
-        # ^ ^ ^ Start the MCP stdio server in a separate thread
-        # to avoid blocking the FastAPI server
-
-        # --- Start FastAPI ---
+        log.info("Starting FastAPI on http://%s:%d", host, port)
         server.run()
-        log.info("FastAPI server started on http://%s:%d", host, port)
 
     except KeyboardInterrupt:
         log.info("Keyboard interrupt received! Shutting down...")

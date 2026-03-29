@@ -9,12 +9,13 @@ from pathlib import Path
 import yaml
 
 from autonode.core.agents.models import AgentModel
-from autonode.core.workflow import WorkflowModel, parse_workflow
+from autonode.core.constants import DEFAULT_AGENTS_CONFIG_PATH, DEFAULT_WORKFLOW_CONFIG_PATH
+from autonode.core.workflow import WorkflowModel
 from autonode.infrastructure.config.agents_schema import AgentsYamlSchema
 from autonode.infrastructure.config.workflow_schema import WorkflowYamlSchema
 
 
-def load_agents_config(config_path: str = "config/agents.yaml") -> dict[str, AgentModel]:
+def load_agents_config(config_path: str = DEFAULT_AGENTS_CONFIG_PATH) -> dict[str, AgentModel]:
     """Load agents from YAML; returns dict agent_id -> AgentModel."""
     path = Path(config_path)
     if not path.exists():
@@ -25,7 +26,7 @@ def load_agents_config(config_path: str = "config/agents.yaml") -> dict[str, Age
     return schema.to_core()
 
 
-def load_workflow_config(path: str = "config/workflow.yaml") -> WorkflowModel:
+def load_workflow_config(path: str = DEFAULT_WORKFLOW_CONFIG_PATH) -> WorkflowModel:
     """Load and validate a workflow definition file."""
     p = Path(path)
     if not p.exists():
@@ -34,5 +35,4 @@ def load_workflow_config(path: str = "config/workflow.yaml") -> WorkflowModel:
         raw = yaml.safe_load(f)
     if not isinstance(raw, dict):
         raise ValueError(f"Workflow config deve essere un mapping YAML: {path}")
-    core_config = WorkflowYamlSchema.model_validate(raw).to_core()
-    return parse_workflow(core_config)
+    return WorkflowYamlSchema.model_validate(raw).to_core()

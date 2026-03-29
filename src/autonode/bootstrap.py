@@ -8,6 +8,7 @@ from typing import Any, cast
 from autonode.application.use_cases.cleanup_uc import CleanupSessionsUseCase
 from autonode.application.use_cases.run_workflow_uc import RunWorkflowUseCase
 from autonode.core.agents.ports import AgentFactoryPort
+from autonode.core.constants import DEFAULT_CHECKPOINT_DB_PATH
 from autonode.core.logging import AutonodeLogger
 from autonode.core.sandbox.models import ExecutionEnvironmentModel
 from autonode.core.tools.ports import ToolRegistryPort
@@ -35,7 +36,7 @@ def bootstrap_app() -> AppContainer:
     One time only.
     """
     # 1. Infrastructure: Singleton
-    db_path = os.environ.get("AUTONODE_DB_PATH", "/app/.autonode/db/autonode.db")
+    db_path = os.environ.get("AUTONODE_DB_PATH", DEFAULT_CHECKPOINT_DB_PATH)
     db_file = Path(db_path).absolute()
     db_file.parent.mkdir(parents=True, exist_ok=True)
     cp_manager = SqliteCheckpointManager(db_path=db_file)

@@ -1,13 +1,13 @@
 """
 Workflow configuration DTOs (framework-agnostic).
 
-Loaded from YAML/JSON in infrastructure; validated when building the graph.
+Loaded from YAML/JSON in infrastructure; factories build runtime topology in code.
 """
 
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-END_SENTINEL = "__end__"
+from autonode.core.constants import DEFAULT_AGENTS_CONFIG_PATH, DEFAULT_TOKEN_BUDGET
 
 # ── Post-workflow actions ──────────────────────────────────────────────────────
 
@@ -20,87 +20,17 @@ class PostProcessStepModel:
     params: dict[str, Any] = field(default_factory=dict)
 
 
-# ── Workflow nodes ─────────────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True, slots=True)
-class AgentWorkflowNodeModel:
-    id: str
-    kind: Literal["agent"]
-    agent_id: str
-    structured_review: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class ToolWorkflowNodeModel:
-    id: str
-    kind: Literal["tool_node"]
-    tools_agent_id: str | None = None
-    tool_names: list[str] | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class StateUpdateWorkflowNodeModel:
-    id: str
-    kind: Literal["state_update"]
-    increment_iteration: bool = False
-    clear_verdict: bool = False
-
-
-@dataclass(frozen=True, slots=True)
-class VcsSyncWorkflowNodeModel:
-    """Commit locale del worktree di sessione dopo un round di editing."""
-
-    id: str
-    kind: Literal["vcs_sync"]
-    commit_message: str = "autonode: sync session {session_id}"
-
-
-WorkflowNodeModel = (
-    AgentWorkflowNodeModel
-    | ToolWorkflowNodeModel
-    | StateUpdateWorkflowNodeModel
-    | VcsSyncWorkflowNodeModel
-)
-
-
-# ── Workflow edges ──────────────────────────────────────────────────────────────
-
-
-@dataclass(frozen=True, slots=True)
-class FixedEdgeModel:
-    from_node: str
-    to: str
-
-
-@dataclass(frozen=True, slots=True)
-class RoutingToolCallsOrNextModel:
-    kind: Literal["tool_calls_or_next"]
-    tools_node: str
-    next: str
-
-
-@dataclass(frozen=True, slots=True)
-class RoutingReviewerFinishOrLoopModel:
-    kind: Literal["reviewer_finish_or_tools_or_revision"]
-    tools_node: str
-    revision_node: str
-
-
-RoutingRule = RoutingToolCallsOrNextModel | RoutingReviewerFinishOrLoopModel
-
-
 # ── Workflow model ──────────────────────────────────────────────────────────────
 
 
 @dataclass(frozen=True, slots=True)
 class WorkflowModel:
-    """Full workflow definition: topology + routing; agent identities stay in agents.yaml."""
+    """Factory selector model: topology lives in Python factories."""
 
-    version: Literal[1] = 1
-    entry: str = ""
+    version: Literal[2] = 2
+    factory: str = ""
     max_iterations: int = 3
-    nodes: list[WorkflowNodeModel] = field(default_factory=list)
-    edges: list[FixedEdgeModel] = field(default_factory=list)
-    routing: dict[str, RoutingRule] = field(default_factory=dict)
+    token_budget: int = DEFAULT_TOKEN_BUDGET
+    agents_path: str = DEFAULT_AGENTS_CONFIG_PATH
+    params: dict[str, Any] = field(default_factory=dict)
     post_processing: list[PostProcessStepModel] = field(default_factory=list)

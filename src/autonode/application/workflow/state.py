@@ -13,6 +13,7 @@ from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.graph.message import add_messages
 
 from autonode.core.agents.models import ReviewVerdictModel
+from autonode.core.constants import DEFAULT_TOKEN_BUDGET
 from autonode.core.sandbox.models import ExecutionEnvironmentModel, WorkspaceBindingModel
 
 
@@ -46,6 +47,8 @@ class GraphWorkflowState(TypedDict):
     status: NotRequired[str]
     current_node: NotRequired[str]
     last_router_decision: NotRequired[str]
+    total_tokens: int
+    token_budget: int
 
 
 def make_initial_graph_state(
@@ -55,6 +58,8 @@ def make_initial_graph_state(
     workspace: WorkspaceBindingModel,
     context: dict[str, Any] | None = None,
     artifacts: dict[str, Any] | None = None,
+    total_tokens: int = 0,
+    token_budget: int = DEFAULT_TOKEN_BUDGET,
 ) -> GraphWorkflowState:
     """Build initial state for invoke/stream with thread_id in config."""
     if workspace.session_id != execution_env.session_id:
@@ -74,4 +79,6 @@ def make_initial_graph_state(
         session_id=workspace.session_id,
         worktree_path=workspace.worktree_host_path,
         branch_name=workspace.branch_name,
+        total_tokens=total_tokens,
+        token_budget=token_budget,
     )

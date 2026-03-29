@@ -101,8 +101,8 @@ def test_execute_releases_container_then_removes_worktree(
         return_value=MagicMock(),
     ):
         with patch(
-            "autonode.application.use_cases.run_workflow_uc.build_graph",
-            return_value=graph,
+            "autonode.application.use_cases.run_workflow_uc.get_registered_factory",
+            return_value=lambda _ctx: graph,
         ):
             uc = RunWorkflowUseCase(
                 vcs,
@@ -151,8 +151,8 @@ def test_execute_cleanup_after_graph_raises(
         return_value=MagicMock(),
     ):
         with patch(
-            "autonode.application.use_cases.run_workflow_uc.build_graph",
-            return_value=graph,
+            "autonode.application.use_cases.run_workflow_uc.get_registered_factory",
+            return_value=lambda _ctx: graph,
         ):
 
             def registry_factory(
@@ -204,38 +204,37 @@ def test_execute_removes_worktree_when_provision_fails(
         "autonode.application.use_cases.run_workflow_uc.load_workflow_config",
         return_value=MagicMock(),
     ):
-        with patch("autonode.application.use_cases.run_workflow_uc.build_graph"):
 
-            def registry_factory(
-                env: ExecutionEnvironmentModel,
-                session_logger: AutonodeLogger,
-            ) -> ToolRegistryPort:
-                return cast(ToolRegistryPort, MagicMock())
+        def registry_factory(
+            env: ExecutionEnvironmentModel,
+            session_logger: AutonodeLogger,
+        ) -> ToolRegistryPort:
+            return cast(ToolRegistryPort, MagicMock())
 
-            def agent_factory_provider(
-                path: str,
-                registry: ToolRegistryPort,
-            ) -> AgentFactoryPort:
-                return cast(AgentFactoryPort, MagicMock())
+        def agent_factory_provider(
+            path: str,
+            registry: ToolRegistryPort,
+        ) -> AgentFactoryPort:
+            return cast(AgentFactoryPort, MagicMock())
 
-            uc = RunWorkflowUseCase(
-                vcs,
-                sandbox,
-                registry_factory,
-                agent_factory_provider,
-                checkpointer=MagicMock(),
-            )
-            req = RunWorkflowUseCaseRequest(
-                prompt="hello world task",
-                workflow_path="/w.yaml",
-                agents_path="/a.yaml",
-                repo_path="/repo",
-                thread_id=_SID,
-                session_logger=autonode_log,
-                session_python_logger=py_log,
-            )
-            with pytest.raises(RuntimeError, match="no sandbox"):
-                uc.execute(req)
+        uc = RunWorkflowUseCase(
+            vcs,
+            sandbox,
+            registry_factory,
+            agent_factory_provider,
+            checkpointer=MagicMock(),
+        )
+        req = RunWorkflowUseCaseRequest(
+            prompt="hello world task",
+            workflow_path="/w.yaml",
+            agents_path="/a.yaml",
+            repo_path="/repo",
+            thread_id=_SID,
+            session_logger=autonode_log,
+            session_python_logger=py_log,
+        )
+        with pytest.raises(RuntimeError, match="no sandbox"):
+            uc.execute(req)
 
     sandbox.release_environment.assert_not_called()
     vcs.remove_session_worktree.assert_called_once_with(_SID, "/repo")

@@ -6,7 +6,7 @@ from pathlib import Path
 
 from langgraph.checkpoint.memory import InMemorySaver
 
-from autonode.application.workflow.builder import build_graph
+from autonode.application.workflow.factories import FactoryContext, get_registered_factory
 from autonode.application.workflow.state import make_initial_graph_state
 from autonode.core.agents.models import ReviewVerdictModel
 from autonode.core.sandbox.models import ExecutionEnvironmentModel, WorkspaceBindingModel
@@ -42,12 +42,15 @@ def test_graph_invoke_reviewer_structured_approval_ends(
         )
     )
     registry = _registry(tmp_path)
-    graph = build_graph(
-        workflow_config,
-        factory,
-        registry,
-        checkpointer=InMemorySaver(),
-        vcs_provider=StubVcsProviderForCompileTests(),
+    factory_fn = get_registered_factory(workflow_config.factory)
+    graph = factory_fn(
+        FactoryContext(
+            workflow=workflow_config,
+            agent_factory=factory,
+            tool_registry=registry,
+            vcs_provider=StubVcsProviderForCompileTests(),
+            checkpointer=InMemorySaver(),
+        )
     )
     repo = tmp_path / "repo"
     repo.mkdir(exist_ok=True)

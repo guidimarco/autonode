@@ -2,6 +2,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 
+from autonode.core.constants import DEFAULT_AGENTS_CONFIG_PATH, DEFAULT_WORKFLOW_CONFIG_PATH
 from autonode.infrastructure.paths.repo_resolution import ensure_git_repo_under_root
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[4]
@@ -14,11 +15,11 @@ class WorkflowRunRequest(BaseModel):
     """
 
     workflow_path: str = Field(
-        default="config/workflow.yaml",
+        default=DEFAULT_WORKFLOW_CONFIG_PATH,
         description="The path to the workflow YAML configuration file.",
     )
     agents_path: str = Field(
-        default="config/agents.yaml",
+        default=DEFAULT_AGENTS_CONFIG_PATH,
         description="The path to the agents YAML configuration file.",
     )
     prompt: str = Field(

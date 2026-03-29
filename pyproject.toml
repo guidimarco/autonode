@@ -18,7 +18,6 @@ dependencies = [
     "langsmith>=0.1",
     "aider-chat",
     "docker>=7.0.0",
-    "mcp>=1.26.0",
     "uvicorn",
 ]
 
@@ -38,9 +37,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "I", "UP"]
-
-[tool.ruff.lint.per-file-ignores]
-"src/autonode/presentation/mcp/server.py" = ["E402"]
 
 [tool.black]
 line-length = 100

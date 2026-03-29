@@ -11,6 +11,7 @@ from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, ValidationError
 
+from autonode.core.constants import DEFAULT_AGENTS_CONFIG_PATH, DEFAULT_WORKFLOW_CONFIG_PATH
 from autonode.core.sandbox import session_paths
 from autonode.infrastructure.paths.repo_resolution import ensure_git_repo_under_root
 from autonode.infrastructure.persistence.session_status_store import write_session_status
@@ -85,8 +86,8 @@ def execute(
         "prompt": payload.prompt,
         "repo_path": str(repo_resolved),
         "thread_id": session_id,
-        "workflow_path": str(_REPO_ROOT / "config" / "workflow.yaml"),
-        "agents_path": str(_REPO_ROOT / "config" / "agents.yaml"),
+        "workflow_path": str(_REPO_ROOT / DEFAULT_WORKFLOW_CONFIG_PATH),
+        "agents_path": str(_REPO_ROOT / DEFAULT_AGENTS_CONFIG_PATH),
     }
     background_tasks.add_task(_execute_workflow_background, container, raw)
 

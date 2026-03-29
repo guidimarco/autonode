@@ -8,7 +8,7 @@ Rules:
 - The connection is opened ONCE per process (singleton via lru_cache).
 - WAL mode is applied immediately to reduce write contention.
 - ``check_same_thread=False`` allows the connection to be shared across
-  threads (FastAPI worker threads, CLI, MCP).
+  threads (FastAPI worker threads, CLI).
 - No other module may import ``sqlite3`` for checkpoint purposes.
 """
 

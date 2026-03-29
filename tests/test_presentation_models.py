@@ -11,6 +11,15 @@ from autonode.presentation.workflow.models import WorkflowRunRequest
 
 TESTDATA = Path(__file__).resolve().parent / "testdata"
 
+# Minimal valid workflow V2 for path-existence checks (matches WorkflowYamlSchema).
+_MINIMAL_WORKFLOW_V2 = """\
+version: 2
+factory: dev_review_loop
+max_iterations: 3
+token_budget: 1000
+agents_path: config/agents.yaml
+"""
+
 
 @pytest.fixture
 def fake_repos_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -33,7 +42,7 @@ def _minimal_git_repo_with_config(repo_root: Path) -> tuple[Path, Path]:
 
     workflow = config_dir / "workflow.yaml"
     agents = config_dir / "agents.yaml"
-    workflow.write_text("entry: alpha\nnodes: []\n", encoding="utf-8")
+    workflow.write_text(_MINIMAL_WORKFLOW_V2, encoding="utf-8")
     agents.write_text("agents: []\n", encoding="utf-8")
     return workflow, agents
 
@@ -110,9 +119,7 @@ def test_empty_prompt_uses_default(fake_repos_root: Path) -> None:
 def test_empty_workflow_path_uses_field_default(fake_repos_root: Path) -> None:
     repo_root = fake_repos_root / "proj"
     _, ag = _minimal_git_repo_with_config(repo_root)
-    (repo_root / "config" / "workflow.yaml").write_text(
-        "entry: alpha\nnodes: []\n", encoding="utf-8"
-    )
+    (repo_root / "config" / "workflow.yaml").write_text(_MINIMAL_WORKFLOW_V2, encoding="utf-8")
 
     old_cwd = Path.cwd()
     try:
@@ -137,9 +144,7 @@ def test_empty_workflow_path_uses_field_default(fake_repos_root: Path) -> None:
 def test_none_workflow_path_uses_field_default(fake_repos_root: Path) -> None:
     repo_root = fake_repos_root / "proj"
     _, ag = _minimal_git_repo_with_config(repo_root)
-    (repo_root / "config" / "workflow.yaml").write_text(
-        "entry: alpha\nnodes: []\n", encoding="utf-8"
-    )
+    (repo_root / "config" / "workflow.yaml").write_text(_MINIMAL_WORKFLOW_V2, encoding="utf-8")
 
     old_cwd = Path.cwd()
     try:
@@ -170,7 +175,7 @@ def test_accepts_testdata_yaml_paths(fake_repos_root: Path) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
     wf = config_dir / "workflow.yaml"
     ag = config_dir / "agents.yaml"
-    shutil.copy2(TESTDATA / "workflow.yaml", wf)
+    shutil.copy2(TESTDATA / "workflow_default.yaml", wf)
     shutil.copy2(TESTDATA / "agents.yaml", ag)
 
     req = WorkflowRunRequest(

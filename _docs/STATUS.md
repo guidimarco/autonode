@@ -3,14 +3,14 @@
 ## Visione
 
 Autonode esegue workflow multi-agent su una codebase locale usando **grafi dichiarativi**.  
-LLM, tool, VCS e integrazioni HTTP/MCP sono previsti via **adapter/ports**.  
+LLM, tool, VCS e integrazioni HTTP sono previsti via **adapter/ports**.  
 Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su `review_verdict` (reviewer strutturato) o condizioni di fine.
 
 ## Stack Tecnologico
 
 - **Python 3.12**: vincoli in `pyproject.toml` (`tool.ruff.target-version`, `tool.mypy.python_version`).
 - **LangChain >= 0.3.0**: agenti creati con `langchain_openai.ChatOpenAI` (factory).
-- **LangGraph >= 0.2**: orchestration del workflow in `application/workflow/builder.py` (`build_graph`).
+- **LangGraph >= 0.2**: orchestration del workflow via factory registrate (`get_registered_factory`, `FactoryContext`) e helper nodi in `application/agents/nodes.py`.
 - **LangSmith >= 0.1**: logging/tracing dichiarato (tracing configurabile).
 - **LLM su OpenRouter**: `OPEN_ROUTER_API_KEY` + `base_url="https://openrouter.ai/api/v1"` in `infrastructure/factory/agent_factory.py`.
 - **Aider**: tool `aider` via `aider-chat` (CLI nel container), registrato in `infrastructure/tools/registry.py`; modello `--model` da env `AIDER_MODEL` (default `openrouter/mistralai/devstral-2512`).
@@ -28,7 +28,7 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su `review_verdi
   - Factory agenti ci sono;
   - VCS: `GitWorktreeProvider` (layout `{REPOS_ROOT}/autonode_docker/<id>/workspace|outputs`; log/stato sotto `DATA_ROOT`) + cleanup; usato dal CLI insieme a `DockerAdapter`.
   - Sandbox Docker: immagine `autonode-sandbox:latest` costruita da `docker/sandbox.Dockerfile` con contesto `.` (cwd = root repo); `DockerAdapter` inietta nel container le API key note (`OPENAI_*`, `ANTHROPIC_*`, `OPEN_ROUTER_*`) per Aider/provider.
-- **`presentation/`**: entrypoint CLI operativo; server MCP stdio (`autonode mcp`) in `presentation/mcp/`.
+- **`presentation/`**: entrypoint CLI operativo e gateway FastAPI (`api.py`).
   - `cli.py` esegue il **bootstrap** (Git worktree + container Docker) **prima** di `graph.invoke()`; il grafo non avvia mai tool senza `execution_env` valido nello stato.
 
 ## Feature Implementate
@@ -49,7 +49,7 @@ Nel runtime, **LangGraph** itera nodi agent/tool e ferma la run su `review_verdi
 
 - **`compile_workflow` richiede sempre `vcs_provider`**: il CLI passa `GitWorktreeProvider`; in test si usa uno stub che non simula worktree reali.
 - **Coding end-to-end non dimostrato**: il tool `aider` è registrato, ma il workflow di esempio non lo usa come motore di editing con commit locale end-to-end.
-- **Ingressi remoti parziali**: MCP stdio in `presentation/mcp/` con tool `run_workflow` collegato al use case reale; manca FastAPI e altri ingressi HTTP.
+- **Ingressi remoti parziali**: `POST /execute` in `presentation/api.py`; estensioni aggiuntive (webhook, altri ingressi) da definire.
 - **Checkpoint / serializzazione stato**: `execution_env` nello stato del grafo potrebbe non essere serializzabile con checkpointer persistenti (da valutare se si introduce persistenza).
 - ~~**Verdetti euristici**~~: sostituiti da **review strutturato** (`review_verdict` nello stato) per il reviewer; fallback sicuro a non approvato se l’output LLM non valida.
 - **Testing: strumenti sì, integrazione VCS/worktree e coding no**: i test coprono tool/parsing; manca un end-to-end sul loop coding + Git reale.

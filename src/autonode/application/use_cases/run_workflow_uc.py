@@ -7,10 +7,11 @@ from typing import Any
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
-from autonode.application.workflow.builder import build_graph
+from autonode.application.workflow.factories import FactoryContext, get_registered_factory
 from autonode.application.workflow.state import make_initial_graph_state
 from autonode.core.agents.models import ReviewVerdictModel
 from autonode.core.agents.ports import AgentFactoryPort
+from autonode.core.exceptions import TokenBudgetExceededError
 from autonode.core.logging import AutonodeLogger
 from autonode.core.sandbox.models import ExecutionEnvironmentModel
 from autonode.core.sandbox.ports import SandboxProviderPort
@@ -18,6 +19,7 @@ from autonode.core.tools.ports import ToolRegistryPort
 from autonode.core.workflow.ports import VCSProviderPort
 from autonode.infrastructure.config.loader import load_workflow_config
 from autonode.infrastructure.persistence.session_status_store import write_session_status
+from autonode.infrastructure.telemetry import TokenBudgetCallback, TokenBudgetExceeded
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,23 +85,34 @@ class RunWorkflowUseCase:
             factory = self.agent_factory_provider(request.agents_path, registry)
 
             workflow = load_workflow_config(request.workflow_path)
-            graph = build_graph(
-                workflow,
-                factory,
-                registry,
-                checkpointer=self.checkpointer,
-                vcs_provider=self.vcs,
+            factory_fn = get_registered_factory(workflow.factory)
+            graph = factory_fn(
+                FactoryContext(
+                    workflow=workflow,
+                    agent_factory=factory,
+                    tool_registry=registry,
+                    vcs_provider=self.vcs,
+                    checkpointer=self.checkpointer,
+                )
             )
+            token_callback = TokenBudgetCallback(budget=workflow.token_budget)
 
             initial_state = make_initial_graph_state(
                 request.prompt,
                 execution_env=execution_env,
                 workspace=workspace,
+                token_budget=workflow.token_budget,
             )
-            final_state = graph.invoke(
-                initial_state,
-                config={"configurable": {"thread_id": request.thread_id}},
-            )
+            try:
+                final_state = graph.invoke(
+                    initial_state,
+                    config={
+                        "configurable": {"thread_id": request.thread_id},
+                        "callbacks": [token_callback],
+                    },
+                )
+            except TokenBudgetExceeded as exc:
+                raise TokenBudgetExceededError(exc.total_tokens, exc.budget) from exc
             last_msg = final_state["messages"][-1]
             content = getattr(last_msg, "content", str(last_msg))
 
