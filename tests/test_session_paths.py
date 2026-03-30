@@ -9,7 +9,7 @@ import pytest
 from autonode.core.sandbox.session_paths import (
     docker_sessions_root,
     session_data_root,
-    session_logs_dir,
+    session_log_file,
     session_op_root,
     session_outputs_path,
     session_status_file,
@@ -27,7 +27,7 @@ def test_session_paths_layout() -> None:
     assert session_workspace_path(sid) == str((expected_docker / "workspace").resolve())
     assert session_outputs_path(sid) == str((expected_docker / "outputs").resolve())
     assert session_data_root(sid) == str((Path("/data") / sid).resolve())
-    assert session_logs_dir(sid) == str((Path("/data") / sid / "logs").resolve())
+    assert session_log_file(sid) == str((Path("/data") / sid / "session.log").resolve())
     assert session_status_file(sid) == str((Path("/data") / sid / "status.json").resolve())
     assert docker_sessions_root() == str(Path("/src/autonode_docker").resolve())
 

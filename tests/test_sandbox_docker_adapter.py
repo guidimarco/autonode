@@ -134,6 +134,10 @@ def test_provision_passes_llm_env_vars(
     assert env.get("OPEN_ROUTER_API_KEY") == "sk-test"
     assert env.get("OPENAI_API_KEY") == "sk-openai"
     assert "ANTHROPIC_API_KEY" not in env
+    assert env.get("PYTHONUNBUFFERED") == "1"
+
+    run_kw = mock_docker_client.containers.run.call_args.kwargs
+    assert run_kw.get("tty") is False
 
     from autonode.core.sandbox.session_paths import session_outputs_path, session_workspace_path
     from autonode.infrastructure.sandbox.host_bind_paths import host_bind_path_for_container_path

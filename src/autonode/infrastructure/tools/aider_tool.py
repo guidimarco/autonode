@@ -74,6 +74,7 @@ def make_container_aider_tool(
                 stdout=result.stdout,
                 stderr=result.stderr,
                 prefix="[AIDER] > ",
+                exit_code=result.exit_code,
             )
         except Exception as e:
             session_logger.exception("[AIDER] > errore subprocess aider: %s", e)

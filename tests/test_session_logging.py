@@ -27,7 +27,7 @@ def test_attach_returns_loggers_and_detach_closes_handlers(
 
     autonode_log, py_logger = attach_session_logging(_VALID_UUID)
 
-    log = fake_data / _VALID_UUID / "logs" / "session.log"
+    log = fake_data / _VALID_UUID / "session.log"
     assert log.is_file()
     assert len(py_logger.handlers) == 2
 

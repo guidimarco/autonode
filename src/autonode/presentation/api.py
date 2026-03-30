@@ -33,7 +33,7 @@ class ExecuteRequest(BaseModel):
 def _ensure_session_directories(session_id: str) -> None:
     Path(session_paths.session_op_root(session_id)).mkdir(parents=True, exist_ok=True)
     Path(session_paths.session_outputs_path(session_id)).mkdir(parents=True, exist_ok=True)
-    Path(session_paths.session_logs_dir(session_id)).mkdir(parents=True, exist_ok=True)
+    Path(session_paths.session_data_root(session_id)).mkdir(parents=True, exist_ok=True)
 
 
 def _execute_workflow_background(container: Any, raw: dict[str, Any]) -> None:

@@ -14,6 +14,7 @@ from autonode.application.agents.nodes import inject_agent_node, inject_tool_nod
 from autonode.application.workflow.factories.registry import FactoryContext, register_factory
 from autonode.application.workflow.state import GraphWorkflowState, default_review_verdict
 from autonode.core.agents.models import ReviewVerdictModel
+from autonode.infrastructure.logging.agent_thought import log_agent_thought_for_message
 
 
 @register_factory("dev_review_loop")
@@ -46,6 +47,8 @@ def build_dev_review_loop(ctx: FactoryContext) -> Any:
             raw_verdict = response.get("review_verdict")
             if isinstance(raw_verdict, ReviewVerdictModel):
                 verdict = raw_verdict
+
+        log_agent_thought_for_message(ctx.session_python_logger, message)
 
         update: dict[str, Any] = {
             "messages": [message],

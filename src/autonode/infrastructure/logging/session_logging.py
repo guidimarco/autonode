@@ -8,7 +8,7 @@ import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from autonode.core.sandbox.session_paths import session_logs_dir, validate_session_id
+from autonode.core.sandbox.session_paths import session_log_file, validate_session_id
 from autonode.infrastructure.logging.stderr_adapter import StandardErrorAutonodeLogger
 
 _SESSION_LOGGER_PREFIX = "autonode.session."
@@ -27,15 +27,14 @@ class _FlushAfterEmitRotatingFileHandler(RotatingFileHandler):
 
 def attach_session_logging(session_id: str) -> tuple[StandardErrorAutonodeLogger, logging.Logger]:
     """
-    Create an isolated logger for the session (file ``logs/session.log`` + stderr).
+    Create an isolated logger for the session (``session.log`` under session data root + stderr).
 
     Return ``(adapter AutonodeLogger, logging.Logger stdlib)`` to pass to the use case and
     to the ``DockerAdapter`` without using ``LoggerFactory`` (parallel sessions safe).
     """
     sid = validate_session_id(session_id)
-    log_dir = Path(session_logs_dir(sid))
-    log_dir.mkdir(parents=True, exist_ok=True)
-    log_path = log_dir / "session.log"
+    log_path = Path(session_log_file(sid))
+    log_path.parent.mkdir(parents=True, exist_ok=True)
 
     name = f"{_SESSION_LOGGER_PREFIX}{sid}"
     py_logger = logging.getLogger(name)

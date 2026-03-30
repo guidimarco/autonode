@@ -59,9 +59,11 @@ def session_data_root(session_id: str) -> str:
     return str((Path(DATA_ROOT) / sid).resolve())
 
 
-def session_logs_dir(session_id: str) -> str:
-    """Directory log session: ``{DATA_ROOT}/{session_id}/logs/`` (file ``session.log``)."""
-    return str(Path(session_data_root(session_id)) / "logs")
+def session_log_file(session_id: str) -> str:
+    """
+    Session log path: ``{DATA_ROOT}/{session_id}/session.log`` (session root; no ``logs/`` folder).
+    """
+    return str(Path(session_data_root(session_id)) / "session.log")
 
 
 def session_status_file(session_id: str) -> str:

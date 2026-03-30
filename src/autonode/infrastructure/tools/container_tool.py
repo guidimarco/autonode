@@ -85,7 +85,16 @@ def compose_output_and_mirror(
     stdout: str,
     stderr: str,
     prefix: str,
+    exit_code: int,
 ) -> str:
+    has_out = bool(stdout.strip()) or bool(stderr.strip())
+    if not has_out:
+        session_logger.info(
+            "%sComando completato (exit code: %s, no output)",
+            prefix,
+            exit_code,
+        )
+        return "(nessun output)"
     if stdout:
         _log_stream_lines(session_logger, prefix, stdout)
     output = stdout
@@ -120,6 +129,7 @@ def make_container_shell_tool(
                 stdout=result.stdout,
                 stderr=result.stderr,
                 prefix="[DOCKER_EXEC] > ",
+                exit_code=result.exit_code,
             )
         except TimeoutError:
             return "ERRORE: timeout (60s) superato."

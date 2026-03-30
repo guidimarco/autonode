@@ -55,7 +55,7 @@ Abbiamo separato il codice dai dati persistenti per garantire isolamento e sicur
   - `autonode.db`: Database SQLite centrale (spostato qui per persistenza).
   - `appsmith/`: Tutti i file di configurazione e widget di Appsmith.
   - `{session_id}/`: Cartella dinamica per ogni esecuzione con:
-    - `logs/session.log`: Log dell'agente e streaming Docker in tempo reale.
+    - `session.log`: Log di sessione (ragionamento `[AGENT_THOUGHT]`, output tool, stream sandbox).
     - `status.json`: Stato del processo per il polling della UI.
 - **WorkTree e Sandbox**: Ogni task inizializza un container dedicato che opera su un WorkTree temporaneo isolato, scrivendo i risultati nella cartella di sessione dedicata.
 

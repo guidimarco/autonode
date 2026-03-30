@@ -43,7 +43,9 @@ _SANDBOX_ENV_KEYS = (
 
 
 def _host_env_for_container() -> dict[str, str]:
-    return {k: v for k in _SANDBOX_ENV_KEYS if (v := os.environ.get(k, "").strip())}
+    env = {k: v for k in _SANDBOX_ENV_KEYS if (v := os.environ.get(k, "").strip())}
+    env["PYTHONUNBUFFERED"] = "1"
+    return env
 
 
 def _sandbox_image_abort(message: str) -> None:
@@ -74,8 +76,12 @@ class DockerAdapter(SandboxProviderPort):
     ) -> None:
         """Legge lo stream Docker (stdout/stderr) e lo appende al ``logging.Logger`` di sessione."""
         try:
-            logs = container.logs
-            for chunk in logs(stream=True, follow=True):
+            for chunk in container.logs(
+                stdout=True,
+                stderr=True,
+                stream=True,
+                follow=True,
+            ):
                 if not chunk:
                     continue
                 text = (
@@ -86,8 +92,12 @@ class DockerAdapter(SandboxProviderPort):
                 for line in text.splitlines():
                     if line:
                         session_python_logger.info("[sandbox] %s", line)
-        except Exception:
-            logger.debug("Stream log sandbox terminato", exc_info=True)
+        except Exception as e:
+            session_python_logger.warning(
+                "[sandbox] Log stream failed: %s",
+                e,
+                exc_info=True,
+            )
 
     def _start_sandbox_log_thread(
         self,
@@ -161,7 +171,7 @@ class DockerAdapter(SandboxProviderPort):
             self._image,
             command=self._startup_command,
             detach=True,
-            tty=True,
+            tty=False,
             auto_remove=True,
             name=f"{SANDBOX_CONTAINER_PREFIX}{workspace.session_id}",
             working_dir=CONTAINER_WORKSPACE_PATH,
@@ -197,6 +207,7 @@ class DockerAdapter(SandboxProviderPort):
             self._join_sandbox_log_thread(sid)
             return
 
+        # Stop/remove first so the logs follow stream ends; then join the reader thread.
         container.remove(force=True)
         self._join_sandbox_log_thread(sid)
 

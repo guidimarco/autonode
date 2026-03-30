@@ -12,6 +12,7 @@ from langgraph.prebuilt import ToolNode
 
 from autonode.application.workflow.state import GraphWorkflowState
 from autonode.core.tools.ports import ToolRegistryPort
+from autonode.infrastructure.logging.agent_thought import log_agent_thought_for_message
 
 if TYPE_CHECKING:
     from autonode.application.workflow.factories.registry import FactoryContext
@@ -48,7 +49,9 @@ def inject_agent_node(
 
     def node_fn(state: GraphWorkflowState) -> dict[str, Any]:
         response = agent.invoke(state["messages"])
-        return {"messages": [to_message(response)], "current_node": node_id}
+        msg = to_message(response)
+        log_agent_thought_for_message(ctx.session_python_logger, msg)
+        return {"messages": [msg], "current_node": node_id}
 
     graph.add_node(node_id, node_fn)
 

@@ -93,6 +93,7 @@ class RunWorkflowUseCase:
                     tool_registry=registry,
                     vcs_provider=self.vcs,
                     checkpointer=self.checkpointer,
+                    session_python_logger=request.session_python_logger,
                 )
             )
             token_callback = TokenBudgetCallback(budget=workflow.token_budget)

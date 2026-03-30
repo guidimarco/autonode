@@ -4,6 +4,7 @@ Graph factory registry: named Python callables build compiled LangGraph graphs.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,7 @@ class FactoryContext:
     vcs_provider: VCSProviderPort
     repo_root: Path | None = None
     checkpointer: Any = None
+    session_python_logger: logging.Logger | None = None
 
 
 # Compiled LangGraph graph or compatible runnable; kept loose for factory return types.
